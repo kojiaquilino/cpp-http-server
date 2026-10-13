@@ -30,7 +30,7 @@ int main() {
 
     for(int y = 0; y < image.height; y++) {
         for(int x = 0; x < image.width; x++) {
-            int index = y * image.height + x;
+            int index = y * image.width + x;
             std::cout << static_cast<int>(image.pixels[index]) << ' ';
         }
 
