@@ -13,4 +13,4 @@ target_include_directories(media_io PRIVATE third_party/stb)
 # Declare executable media_demo
 add_executable(media_demo src/main.cpp)
 target_link_libraries(media_demo PRIVATE media_core) # Add media_demo library to linker
-target_link_libraries(media_io PRIVATE media_core)   # Add media_io library to linker
+target_link_libraries(media_demo PRIVATE media_io)   # Add media_io library to linker
