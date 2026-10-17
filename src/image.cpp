@@ -21,7 +21,7 @@ void Image::validate() const {
     if (width == 0 || height == 0) {
         throw std::invalid_argument("Dimensions must be greater than zero");
     }
-    
+
     // Validate format
     switch (format) {
     case PixelFormat::Gray8:
