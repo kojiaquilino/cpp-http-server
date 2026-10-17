@@ -1,14 +1,16 @@
+#include "media/image_io.hpp"
+
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-#include <vector>
 #include <limits>
 #include <memory>
 #include <stdexcept>
-#include "media/image_io.hpp"
+#include <string>
+#include <vector>
 
 Image load_image(const std::string &path)
 {
@@ -70,4 +72,36 @@ Image load_image(const std::string &path)
         PixelFormat::RGB8,
         pixels
     );
+}
+
+
+void save_png(const Image &image, const std::string &path) {
+    // Validate image before saving -> throws an error is invalid members
+    image.validate();
+
+    // Checking stride size capacity (row of an array) within an int
+    // only ints are accepted by stbi_write_png()
+    const auto maximum_int = static_cast<std::size_t>(std::numeric_limits<int>::max());
+    const int bytes_per_pixel = (image.format == PixelFormat::RGB8) ? 3 : 1;
+
+    if(image.width > maximum_int / bytes_per_pixel) {
+        throw std::overflow_error("Row stride exceeds int capacity");
+    }
+
+    const int stride = image.width * bytes_per_pixel;
+
+    // Save image as png to filepath
+    int err = stbi_write_png(
+        path.c_str(),
+        static_cast<int>(image.width),
+        static_cast<int>(image.height),
+        bytes_per_pixel,
+        image.pixels.data(),
+        stride
+    );
+
+    // stbi_write_png returns 0 on error
+    if(err == 0) {
+        throw std::runtime_error("Failed to save image as a png to " + path);
+    }
 }

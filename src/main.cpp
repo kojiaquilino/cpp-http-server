@@ -8,7 +8,11 @@ int main()
     try
     {
         Image image = load_image("test/IMG_5618.jpeg");
-        std::cout << image.width << '\n' << image.height << '\n' << image.pixels.size();
+        std::cout << "Width: " << image.width << '\n' 
+                  << "Height: " << image.height << '\n' 
+                  << "Number of pixels: " << image.pixels.size();
+
+        save_png(image, "outputs/test.png");
     }
     catch (const std::exception &error)
     {
