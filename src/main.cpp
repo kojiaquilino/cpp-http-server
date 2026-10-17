@@ -24,6 +24,11 @@ int main(int argc, char* argv[]) {
     Converts supported PNG/JPEG input to PNG.
     The output directory must already exist.)" << '\n';
                 return 0;
+            } else {
+                std::cerr << R"(Usage: media_demo <input-image> <output.png>
+    Converts supported PNG/JPEG input to PNG.
+    The output directory must already exist.)" << '\n';
+            return 1;
             }
         }
 
@@ -44,9 +49,13 @@ int main(int argc, char* argv[]) {
             std::cout << ("Saved to " + output_path + ".\n");
         }
 
-        
-
-
+        // Return error, print usage
+        else {
+            std::cerr << R"(Usage: media_demo <input-image> <output.png>
+    Converts supported PNG/JPEG input to PNG.
+    The output directory must already exist.)" << '\n';
+            return 1;
+        }
 
     } catch (const std::exception &error) {
         std::cerr << error.what() << '\n';

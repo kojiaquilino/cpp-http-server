@@ -74,7 +74,6 @@ Image load_image(const std::string &path)
     );
 }
 
-
 void save_png(const Image &image, const std::string &path) {
     // Validate image before saving -> throws an error is invalid members
     image.validate();
