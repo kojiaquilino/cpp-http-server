@@ -5,6 +5,7 @@
 #include "stb_image_write.h"
 
 #include <vector>
+#include <limits>
 #include "media/image_io.hpp"
 
 Image load_image(const std::string &path)
@@ -46,7 +47,7 @@ Image load_image(const std::string &path)
         throw std::overflow_error("Pixel count overflow");
     }
 
-    const std::size_t pixel_count = width * height;
+    const std::size_t pixel_count = image_width * image_height;
 
     if(pixel_count > maximum / 3) {
         throw std::overflow_error("Byte count overflow");
