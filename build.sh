@@ -12,4 +12,4 @@ cmake -S . -B build-macos -G "Unix Makefiles" \
 cmake --build build-macos --parallel 2
 
 # Run executable
-./build-macos/media_demo
+# ./build-macos/media_demo
