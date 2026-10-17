@@ -49,7 +49,7 @@ int main(int argc, char* argv[]) {
 
 
     } catch (const std::exception &error) {
-        std::cout << error.what() << '\n';
+        std::cerr << error.what() << '\n';
         return 1;
     }
 }
