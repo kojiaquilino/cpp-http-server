@@ -6,6 +6,8 @@
 
 #include <vector>
 #include <limits>
+#include <memory>
+#include <stdexcept>
 #include "media/image_io.hpp"
 
 Image load_image(const std::string &path)
