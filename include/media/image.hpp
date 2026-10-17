@@ -4,15 +4,13 @@
 #include <vector>  // provides vector
 
 // Pixel representation
-enum class PixelFormat
-{
+enum class PixelFormat {
     Gray8, // 8 bits per channel (0-255)
     RGB8
 };
 
 // Image representation
-struct Image
-{
+struct Image {
     std::size_t width;
     std::size_t height;
     PixelFormat format;
