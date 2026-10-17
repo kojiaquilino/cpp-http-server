@@ -8,10 +8,10 @@ Image::Image(std::size_t w,
              const std::vector<std::uint8_t> &data)
     : width(w), height(h), format(f), pixels(data)
 {
-    Image::validate_image(*this);
+    validate();
 }
 
-void Image::validate_image(const Image &image)
+void Image::validate() const
 {
 
     std::size_t bytes_per_pixel;
@@ -19,12 +19,12 @@ void Image::validate_image(const Image &image)
 
     // Validate dimensions
 
-    if (image.width == 0 || image.height == 0)
+    if (width == 0 || height == 0)
     {
         throw std::invalid_argument("Dimensions must be greater than zero");
     }
     // Validate format
-    switch (image.format)
+    switch (format)
     {
     case PixelFormat::Gray8:
         bytes_per_pixel = 1;
@@ -40,12 +40,12 @@ void Image::validate_image(const Image &image)
 
     // Checking for value overflow
 
-    if (image.width > maximum / image.height)
+    if (width > maximum / height)
     {
         throw std::overflow_error("Pixel count overflow");
     }
 
-    const std::size_t pixel_count = image.width * image.height;
+    const std::size_t pixel_count = width * height;
 
     if (pixel_count > maximum / bytes_per_pixel)
     {
@@ -54,7 +54,7 @@ void Image::validate_image(const Image &image)
 
     const std::size_t required_size = pixel_count * bytes_per_pixel;
 
-    if (image.pixels.size() != required_size)
+    if (pixels.size() != required_size)
     {
         throw std::invalid_argument("Pixel storage size does not match dimensions");
     }

@@ -23,5 +23,5 @@ struct Image
           PixelFormat f,
           const std::vector<std::uint8_t> &data);
 
-    void validate_image(const Image &image);
+    void validate() const;
 };
