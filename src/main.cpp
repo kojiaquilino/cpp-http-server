@@ -1,27 +1,14 @@
 #include <iostream>
 #include "media/image.hpp"
+#include "media/image_io.hpp"
 
 int main()
 {
     // testing image
     try
     {
-        Image image{
-            3,
-            2,
-            PixelFormat::Gray8,
-            {0, 127, 128, 129, 200, 255}};
-
-        for (std::size_t y = 0; y < image.height; y++)
-        {
-            for (std::size_t x = 0; x < image.width; x++)
-            {
-                std::size_t index = y * image.width + x;
-                std::cout << static_cast<int>(image.pixels[index]) << ' ';
-            }
-
-            std::cout << '\n';
-        }
+        Image image = load_image("test/IMG_5618.jpeg");
+        std::cout << image.width << '\n' << image.height << '\n' << image.pixels.size();
     }
     catch (const std::exception &error)
     {

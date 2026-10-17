@@ -8,10 +8,10 @@ Image::Image(std::size_t w,
              const std::vector<std::uint8_t> &data)
     : width(w), height(h), format(f), pixels(data)
 {
-    validate_image(*this);
+    Image::validate_image(*this);
 }
 
-void validate_image(const Image &image)
+void Image::validate_image(const Image &image)
 {
 
     std::size_t bytes_per_pixel;

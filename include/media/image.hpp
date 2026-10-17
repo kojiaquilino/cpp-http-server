@@ -19,11 +19,9 @@ struct Image
     std::vector<std::uint8_t> pixels;
 
     // Constructor declaration
-    Image(std::size_t w,
-          std::size_t h,
+    Image(std::size_t w, std::size_t h,
           PixelFormat f,
           const std::vector<std::uint8_t> &data);
-};
 
-// Method declarations
-void validate_image(const Image &image);
+    void validate_image(const Image &image);
+};
