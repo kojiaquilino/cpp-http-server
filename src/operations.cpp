@@ -9,7 +9,7 @@
 /// @throws std::overflow_error if image size calculations overflow.
 /// @param image provides a reference to the image.
 /// @param cutoff specifies the grayscale cutoff value.
-void threhold(Image &image, std::uint8_t cutoff) {
+void threshold(Image &image, std::uint8_t cutoff) {
     image.validate();
 
     if(image.format != PixelFormat::Gray8) {
