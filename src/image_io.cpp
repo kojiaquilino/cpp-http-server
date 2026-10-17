@@ -88,6 +88,10 @@ void save_png(const Image &image, const std::string &path) {
         throw std::overflow_error("Row stride exceeds int capacity");
     }
 
+    if(image.height > maximum_int) {
+        throw std::overflow_error("Height exceeds int capacity");
+    }
+
     const int stride = image.width * bytes_per_pixel;
 
     // Save image as png to filepath
