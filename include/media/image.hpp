@@ -1,4 +1,5 @@
 #pragma once
+
 #include <cstddef> // provides size_t
 #include <cstdint> // provides uint8_t
 #include <vector>  // provides vector

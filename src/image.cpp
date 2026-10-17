@@ -1,4 +1,5 @@
 #include "media/image.hpp"
+
 #include <limits>
 #include <stdexcept>
 
