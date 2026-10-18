@@ -1,5 +1,7 @@
 #pragma once
+
 #include "media/image.hpp"
+
 #include <string>
 
 // Load an image from a specified filepath.

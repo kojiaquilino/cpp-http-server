@@ -1,8 +1,10 @@
 #include "media/operations.hpp"
 #include "media/image.hpp"
 
+#include <cmath>
 #include <cstdint>
 #include <stdexcept>
+#include <vector>
 
 
 namespace {
@@ -109,4 +111,27 @@ Image box_blur(const Image& image) {
     }
 
     return blurred_image;
+}
+
+std::vector<double> gaussian_kernel(int radius, double sigma) {
+
+    if(radius < 0) {
+        throw std::invalid_argument("radius must be a nonnegative argument");
+    }
+
+    if(!std::isfinite(sigma) || sigma <= 0.0) {
+        throw std::invalid_argument("sigma must be positive and finite");
+    }
+
+    int index = 0;
+    std::vector<double> weights(2 * radius + 1);
+
+    for(int x{-radius}; x <= radius; ++x) {
+        double scaled{static_cast<double>(x) / sigma};
+        double weight{std::exp(-0.5 * scaled * scaled)};
+        weights.at(index) = weight;
+        ++index;
+    }
+
+    return weights;
 }
