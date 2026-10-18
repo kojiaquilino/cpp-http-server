@@ -4,6 +4,33 @@
 #include <cstdint>
 #include <stdexcept>
 
+
+namespace {
+
+    /// Calulates uniform average of pixel brightness in a 3x3 neighborhood sample.
+    /// Replicates nearest neighbor for out of bounds indices. 
+    /// @returns a uniform average of the 3x3 neighborhood sample.
+    std::uint8_t calculate_average(const Image& image, const std::size_t index) {
+        std::size_t w{image.width};
+        std::size_t h{image.height};
+        std::size_t x{index % w};
+        std::size_t y{index / w};
+        int sum{};
+
+        // evaluate per column
+        for(int offset{-1}; offset < 2; offset++) {
+            std::size_t top_index{(y - 1 >= 0 ? y - 1 : y) * w + (x + offset >= 0 && x + offset < w ? x + offset : x)};
+            std::size_t mid_index{y * w + (x + offset >= 0 && x + offset < w ? x + offset : x)};
+            std::size_t bot_index{(y + 1 < h ? y + 1 : y) * w + (x + offset >= 0 && x + offset < w ? x + offset : x)};
+            sum += image.pixels.at(top_index) + image.pixels.at(mid_index) + image.pixels.at(bot_index);
+        }
+
+        return sum / 9;
+    }
+    
+}
+
+
 /// Converts a Gray8 image to black and white in place.
 /// @throws std::invalid_argument for invalid images or non-Gray8 formats.
 /// @throws std::overflow_error if image size calculations overflow.
@@ -14,7 +41,7 @@ void threshold(Image& image, std::uint8_t cutoff) {
         throw std::invalid_argument("Grayscale thresholding only supported grayscale images.");
     }
 
-    for(auto &pixel : image.pixels) {
+    for(auto& pixel : image.pixels) {
         pixel = (pixel < cutoff) ? 0 : 255;
     }
 }
@@ -50,4 +77,21 @@ Image to_grayscale(const Image& image) {
     }
 
     return grayscale_image;
+}
+
+
+Image box_blur(const Image& image) {
+    image.validate();
+    
+    if(image.format != PixelFormat::Gray8) {
+        throw std::invalid_argument("Grayscale thresholding only supported grayscale images.");
+    }
+
+    Image blurred_image = image;
+
+    for(std::size_t i{0}; i < image.pixels.size(); i++) {
+        blurred_image.pixels.at(i) = calculate_average(image, i);
+    }
+
+    return blurred_image;
 }
