@@ -120,7 +120,7 @@ std::vector<double> gaussian_kernel(int radius, double sigma) {
         throw std::invalid_argument("radius must be a nonnegative argument");
     }
 
-    if(radius > std::numeric_limits<int>::max() - 1 / 2) {
+    if(radius > (std::numeric_limits<int>::max() - 1) / 2) {
         throw std::overflow_error("radius overflows beyond integer capacity");
     }
 
