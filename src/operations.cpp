@@ -22,13 +22,13 @@ namespace {
 
         // evaluate per column
         for(int offset{-1}; offset <= 1; ++offset) {
-            const int candidate_x{static_cast<int>(x) + offset};
+            const std::size_t candidate_x{x + offset};
             const std::size_t sample_x{ 
                 candidate_x < 0
                     ? 0
-                    : candidate_x >= static_cast<int>(w)
+                    : candidate_x >= w
                         ? w - 1 
-                        : static_cast<std::size_t>(candidate_x)
+                        : candidate_x
             };
 
             std::size_t top_index{top_y * w + sample_x};
@@ -40,7 +40,7 @@ namespace {
             sum += image.pixels.at(bot_index);
         }
 
-        return sum / 9;
+        return (sum + 4) / 9;
     }
     
 }
