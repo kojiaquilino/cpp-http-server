@@ -15,14 +15,29 @@ namespace {
         std::size_t h{image.height};
         std::size_t x{index % w};
         std::size_t y{index / w};
+
+        std::size_t top_y{y > 0 ? y - 1 : y};
+        std::size_t bottom_y{y + 1 < h ? y + 1 : y};
         int sum{};
 
         // evaluate per column
-        for(int offset{-1}; offset < 2; offset++) {
-            std::size_t top_index{(y - 1 >= 0 ? y - 1 : y) * w + (x + offset >= 0 && x + offset < w ? x + offset : x)};
-            std::size_t mid_index{y * w + (x + offset >= 0 && x + offset < w ? x + offset : x)};
-            std::size_t bot_index{(y + 1 < h ? y + 1 : y) * w + (x + offset >= 0 && x + offset < w ? x + offset : x)};
-            sum += image.pixels.at(top_index) + image.pixels.at(mid_index) + image.pixels.at(bot_index);
+        for(int offset{-1}; offset <= 1; ++offset) {
+            const int candidate_x{static_cast<int>(x) + offset};
+            const std::size_t sample_x{ 
+                candidate_x < 0
+                    ? 0
+                    : candidate_x >= static_cast<int>(w)
+                        ? w - 1 
+                        : static_cast<std::size_t>(candidate_x)
+            };
+
+            std::size_t top_index{top_y * w + sample_x};
+            std::size_t mid_index{y * w + sample_x};
+            std::size_t bot_index{bottom_y * w + sample_x};
+
+            sum += image.pixels.at(top_index);
+            sum += image.pixels.at(mid_index);
+            sum += image.pixels.at(bot_index);
         }
 
         return sum / 9;
@@ -38,7 +53,7 @@ void threshold(Image& image, std::uint8_t cutoff) {
     image.validate();
 
     if(image.format != PixelFormat::Gray8) {
-        throw std::invalid_argument("Grayscale thresholding only supported grayscale images.");
+        throw std::invalid_argument("Grayscale thresholding only supports grayscale images.");
     }
 
     for(auto& pixel : image.pixels) {
@@ -73,7 +88,7 @@ Image to_grayscale(const Image& image) {
         // approximate brightness value calcualted by rgb values
         const std::uint32_t luma{static_cast<std::uint32_t>((299 * r + 587 * g + 114 * b + 500) / 1000)};
         grayscale_image.pixels.at(pixel_index) = luma;
-        pixel_index++;
+        ++pixel_index;
     }
 
     return grayscale_image;
@@ -84,7 +99,7 @@ Image box_blur(const Image& image) {
     image.validate();
     
     if(image.format != PixelFormat::Gray8) {
-        throw std::invalid_argument("Grayscale thresholding only supported grayscale images.");
+        throw std::invalid_argument("Box blur only supports grayscale images.");
     }
 
     Image blurred_image = image;
