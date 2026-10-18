@@ -38,7 +38,7 @@ Image to_grayscale(const Image& image) {
         grayscale_pixels
     };
 
-    for(int i = 0; i < image.pixels.size(); i += 3) {
+    for(std::size_t i{0}; i < image.pixels.size(); i += 3) {
         const std::uint8_t r{image.pixels.at(i)};
         const std::uint8_t g{image.pixels.at(i + 1)};
         const std::uint8_t b{image.pixels.at(i + 2)};
