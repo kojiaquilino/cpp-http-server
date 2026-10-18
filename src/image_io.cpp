@@ -21,7 +21,7 @@ Image load_image(const std::string &path)
         &width,
         &height,
         &channels,
-        STBI_rgb
+        0
     );
 
     // Wrap pixel buffer in unique ptr
@@ -53,11 +53,11 @@ Image load_image(const std::string &path)
 
     const std::size_t pixel_count = image_width * image_height;
 
-    if(pixel_count > maximum / 3) {
+    if(pixel_count > maximum / channels) {
         throw std::overflow_error("Byte count overflow");
     }
 
-    const std::size_t byte_count = pixel_count * 3;
+    const std::size_t byte_count = pixel_count * channels;
 
     // Starts copying bytes from first pointer until last pointer (exclusive)
     std::vector<std::uint8_t> pixels(
@@ -69,7 +69,7 @@ Image load_image(const std::string &path)
     return Image(
         image_width,
         image_height,
-        PixelFormat::RGB8,
+        (channels == 1) ? PixelFormat:: Gray8 : PixelFormat:: RGB8,
         pixels
     );
 }
