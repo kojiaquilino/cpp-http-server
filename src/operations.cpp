@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <vector>
 
@@ -119,18 +120,29 @@ std::vector<double> gaussian_kernel(int radius, double sigma) {
         throw std::invalid_argument("radius must be a nonnegative argument");
     }
 
+    if(radius > std::numeric_limits<int>::max() - 1 / 2) {
+        throw std::overflow_error("radius overflows beyond integer capacity");
+    }
+
     if(!std::isfinite(sigma) || sigma <= 0.0) {
         throw std::invalid_argument("sigma must be positive and finite");
     }
 
-    int index = 0;
+    double sum{};
+    int index{};
     std::vector<double> weights(2 * radius + 1);
 
     for(int x{-radius}; x <= radius; ++x) {
         double scaled{static_cast<double>(x) / sigma};
         double weight{std::exp(-0.5 * scaled * scaled)};
         weights.at(index) = weight;
+        sum += weight;
         ++index;
+    }
+
+    // normalize weights
+    for(int i{}; i < weights.size(); ++i) {
+        weights.at(i) /= sum;
     }
 
     return weights;
