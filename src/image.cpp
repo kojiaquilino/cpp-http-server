@@ -1,11 +1,12 @@
 #include "media/image.hpp"
+
 #include <limits>
 #include <stdexcept>
 
 Image::Image(std::size_t w,
              std::size_t h,
              PixelFormat f,
-             const std::vector<std::uint8_t> &data)
+             const std::vector<std::uint8_t>& data)
     : width(w), height(h), format(f), pixels(data)
 {
     validate();
@@ -13,10 +14,11 @@ Image::Image(std::size_t w,
 
 void Image::validate() const {
 
-    std::size_t bytes_per_pixel;
+    std::size_t bytes_per_pixel {};
     const auto maximum = std::numeric_limits<std::size_t>::max();
 
-    // Validate dimensions
+
+    //// Validate dimensions and format ////
 
     if (width == 0 || height == 0) {
         throw std::invalid_argument("Dimensions must be greater than zero");
@@ -36,19 +38,19 @@ void Image::validate() const {
         throw std::invalid_argument("Unsupported pixel format");
     }
 
-    // Checking for value overflow
+    //// Check for value overflow ////
 
     if (width > maximum / height) {
         throw std::overflow_error("Pixel count overflow");
     }
 
-    const std::size_t pixel_count = width * height;
+    const std::size_t pixel_count{width * height};
 
     if (pixel_count > maximum / bytes_per_pixel) {
         throw std::overflow_error("Byte count overflow");
     }
 
-    const std::size_t required_size = pixel_count * bytes_per_pixel;
+    const std::size_t required_size{pixel_count * bytes_per_pixel};
 
     if (pixels.size() != required_size) {
         throw std::invalid_argument("Pixel storage size does not match dimensions");

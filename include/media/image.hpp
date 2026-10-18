@@ -1,4 +1,5 @@
 #pragma once
+
 #include <cstddef> // provides size_t
 #include <cstdint> // provides uint8_t
 #include <vector>  // provides vector
@@ -19,7 +20,7 @@ struct Image {
     // Constructor declaration
     Image(std::size_t w, std::size_t h,
           PixelFormat f,
-          const std::vector<std::uint8_t> &data);
+          const std::vector<std::uint8_t>& data);
 
     void validate() const;
 };

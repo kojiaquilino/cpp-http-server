@@ -6,23 +6,23 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
 
-#include <limits>
 #include <memory>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
-Image load_image(const std::string &path)
+Image load_image(const std::string& path)
 {
-    int width, height, channels;
+    int width{}, height{}, channels{};
 
-    stbi_uc *raw_pixels = stbi_load(
+    stbi_uc* raw_pixels{stbi_load(
         path.c_str(),
         &width,
         &height,
         &channels,
-        STBI_rgb
-    );
+        0
+    )};
 
     // Wrap pixel buffer in unique ptr
     std::unique_ptr<stbi_uc, decltype(&stbi_image_free)>
@@ -43,21 +43,21 @@ Image load_image(const std::string &path)
         throw std::runtime_error("Image dimensions must be positive values: " + path);
     }
 
-    const std::size_t image_width = static_cast<std::size_t>(width);  
-    const std::size_t image_height = static_cast<std::size_t>(height);
+    const std::size_t image_width{static_cast<std::size_t>(width)};  
+    const std::size_t image_height{static_cast<std::size_t>(height)};
     const auto maximum = std::numeric_limits<std::size_t>::max();
     
     if(image_width > maximum / height) {
         throw std::overflow_error("Pixel count overflow");
     }
 
-    const std::size_t pixel_count = image_width * image_height;
+    const std::size_t pixel_count{image_width * image_height};
 
-    if(pixel_count > maximum / 3) {
+    if(pixel_count > maximum / channels) {
         throw std::overflow_error("Byte count overflow");
     }
 
-    const std::size_t byte_count = pixel_count * 3;
+    const std::size_t byte_count{pixel_count * channels};
 
     // Starts copying bytes from first pointer until last pointer (exclusive)
     std::vector<std::uint8_t> pixels(
@@ -69,19 +69,19 @@ Image load_image(const std::string &path)
     return Image(
         image_width,
         image_height,
-        PixelFormat::RGB8,
+        (channels == 1) ? PixelFormat:: Gray8 : PixelFormat:: RGB8,
         pixels
     );
 }
 
-void save_png(const Image &image, const std::string &path) {
+void save_png(const Image& image, const std::string& path) {
     // Validate image before saving -> throws an error is invalid members
     image.validate();
 
     // Checking stride size capacity (row of an array) within an int
     // only ints are accepted by stbi_write_png()
     const auto maximum_int = static_cast<std::size_t>(std::numeric_limits<int>::max());
-    const int bytes_per_pixel = (image.format == PixelFormat::RGB8) ? 3 : 1;
+    const int bytes_per_pixel{image.format == PixelFormat::RGB8 ? 3 : 1};
 
     if(image.width > maximum_int / bytes_per_pixel) {
         throw std::overflow_error("Row stride exceeds int capacity");
@@ -91,17 +91,17 @@ void save_png(const Image &image, const std::string &path) {
         throw std::overflow_error("Height exceeds int capacity");
     }
 
-    const int stride = image.width * bytes_per_pixel;
+    const std::size_t stride{image.width * bytes_per_pixel};
 
     // Save image as png to filepath
-    int err = stbi_write_png(
+    int err{stbi_write_png(
         path.c_str(),
         static_cast<int>(image.width),
         static_cast<int>(image.height),
         bytes_per_pixel,
         image.pixels.data(),
         stride
-    );
+    )};
 
     // stbi_write_png returns 0 on error
     if(err == 0) {
