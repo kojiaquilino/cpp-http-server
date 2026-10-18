@@ -23,10 +23,11 @@ Copies an image to PNG, optionally applying grayscale thresholding.
     --threshold <cutoff>  Black/white cutoff from 0 to 255; requires grayscale input.
     --help, -h            Show this help message.
 
-Supports opaque PNG/JPEG input. The output directory must already exist.)";
+Supports PNG/JPEG input. The output directory must already exist.)";
 
     enum class Operation {
-        Threshold,
+        Threshold, 
+        Grayscale,
     };
 
     // Convert cli argument to their corresponding operations.
@@ -37,6 +38,7 @@ Supports opaque PNG/JPEG input. The output directory must already exist.)";
     Operation parse_operation(std::string_view operation) {
         // Enumerate conversion to corresponding enum values
         if(operation == "--threshold") return Operation::Threshold;
+        if(operation == "--grayscale") return Operation::Grayscale;
 
         // Throw error if provided an invalid operation
         throw std::invalid_argument(
@@ -72,6 +74,10 @@ Supports opaque PNG/JPEG input. The output directory must already exist.)";
         threshold(image, cutoff);
     }
 
+    /// Call the to_grayscale() operation and reassign the local image.
+    void call_grayscale(Image& image) {
+        image = to_grayscale(image); // converts the original image to its grayscale format
+    }
 }
 
 /**
@@ -146,6 +152,11 @@ int main(int argc, char* argv[]) {
                             break;
                         }
 
+                        // Parses 0 positional arguments
+                        case Operation::Grayscale: {
+                            call_grayscale(image);
+                            break;
+                        }
                     }
 
                     // Move ptr to next char* in argv
