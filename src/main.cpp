@@ -50,17 +50,17 @@ Supports opaque PNG/JPEG input. The output directory must already exist.)";
     /// and call threshold from operations.cpp, modifying the image directly.
     /// @throws std::invalid_argument if the cutoff is not an integer, or is outside [0, 255].
     void call_threshold(
-        Image &image,
-        char** &current_pos,
+        Image& image,
+        char**& current_pos,
         char** end
     ) {
         if(current_pos + 1 == end) {
             throw std::invalid_argument("\"--threshold\" requires a grayscale cutoff parameter from 0-255");
         }
 
-        std::string text = *++current_pos;
-        std::size_t parsed = 0;
-        int value = std::stoi(text, &parsed);
+        std::string text{*++current_pos};
+        std::size_t parsed{0};
+        int value{std::stoi(text, &parsed)};
 
         // Ensure that the whole string was
         // consumed when parsing the int
@@ -92,7 +92,7 @@ int main(int argc, char* argv[]) {
 
             // media_demo (--help || -h)
             case 2: {
-                const std::string argument = argv[1];
+                const std::string argument{argv[1]};
 
                 if(argument == "-h" || argument == "--help") {
                     std::cout << usage << '\n';
@@ -106,10 +106,10 @@ int main(int argc, char* argv[]) {
 
             // media_demo input_filepath output_filepath
             case 3: {
-                const std::string input_path = argv[1];
-                const std::string output_path = argv[2];
+                const std::string input_path{argv[1]};
+                const std::string output_path{argv[2]};
+                Image image{load_image(input_path)};
 
-                Image image = load_image(input_path);
                 std::cout << ("Filepath: " + input_path + '\n')
                         << "Width: " << image.width << '\n'
                         << "Height: " << image.height << '\n'
@@ -124,10 +124,10 @@ int main(int argc, char* argv[]) {
             // 1+ operations invoked, perform them sequentially,
             // then save to output_filepath
             default: {
-                const std::string input_path = argv[1];
-                const std::string output_path = argv[2];
+                const std::string input_path{argv[1]};
+                const std::string output_path{argv[2]};
 
-                Image image = load_image(input_path);
+                Image image {load_image(input_path)};
 
                 // Start from fourth positional argument
                 // Skip program name (0), and input/output (1/2) filepaths
@@ -135,8 +135,8 @@ int main(int argc, char* argv[]) {
                 char** end = argv + argc;
 
                 while(current_pos < end) {
-                    std::string_view argument = *current_pos;
-                    Operation operation = parse_operation(argument);
+                    std::string_view argument{*current_pos};
+                    Operation operation{parse_operation(argument)};
 
                     switch(operation) {
                     
@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
                 break;
             }
         }
-    } catch (const std::exception &error) {
+    } catch (const std::exception& error) {
         std::cout << usage << "\n\n";
         std::cerr << ("Error: " + static_cast<std::string>(error.what())) << "\n\n";
         return 1;
