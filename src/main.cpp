@@ -28,6 +28,7 @@ Supports PNG/JPEG input. The output directory must already exist.)";
     enum class Operation {
         Threshold, 
         Grayscale,
+        BoxBlur
     };
 
     // Convert cli argument to their corresponding operations.
@@ -39,6 +40,7 @@ Supports PNG/JPEG input. The output directory must already exist.)";
         // Enumerate conversion to corresponding enum values
         if(operation == "--threshold") return Operation::Threshold;
         if(operation == "--grayscale") return Operation::Grayscale;
+        if(operation == "--box-blur") return Operation::BoxBlur;
 
         // Throw error if provided an invalid operation
         throw std::invalid_argument(
@@ -77,6 +79,12 @@ Supports PNG/JPEG input. The output directory must already exist.)";
     /// Call the to_grayscale() operation and reassign the local image.
     void call_grayscale(Image& image) {
         image = to_grayscale(image); // converts the original image to its grayscale format
+    }
+
+    /// 
+    /// Call the box_blur() operation and reassign the local image. 
+    void call_box_blur(Image& image) {
+        image = box_blur(image); // converts original image to blurred representation
     }
 }
 
@@ -157,10 +165,16 @@ int main(int argc, char* argv[]) {
                             call_grayscale(image);
                             break;
                         }
+
+                        // Parses 0 positional arguments
+                        case Operation::BoxBlur: {
+                            call_box_blur(image);
+                            break;
+                        }
                     }
 
                     // Move ptr to next char* in argv
-                    current_pos++;
+                    ++current_pos;
                 }
                     
                 save_png(image, output_path);
