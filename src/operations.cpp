@@ -143,12 +143,12 @@ namespace {
         std::vector<std::uint8_t> blurred_pixels(image.width * image.height); 
 
         // horizontal pass
-        for(int i{}; i < image.pixels.size(); ++i) {
+        for(std::size_t i{}; i < image.pixels.size(); ++i) {
             buffer.at(i) = calculate_gaussian_average_horizontal(image, i, weights, radius);
         }
 
         // vertical pass
-        for(int i{}; i < image.pixels.size(); ++i) {
+        for(std::size_t i{}; i < image.pixels.size(); ++i) {
             blurred_pixels.at(i) = calculate_gaussian_average_vertical(buffer, weights, radius, i, image.width, image.height);
         }
 
