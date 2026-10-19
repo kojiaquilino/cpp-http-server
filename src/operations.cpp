@@ -1,6 +1,7 @@
 #include "media/operations.hpp"
 #include "media/image.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <limits>
@@ -45,7 +46,150 @@ namespace {
 
         return (sum + 4) / 9;
     }
-    
+
+    /// Calculates a weighted average of pixel brightness using horizontal neighbors.
+    /// Replicates nearest neighbor for out of bounds indices.
+    /// Must be performed before the vertical pass. 
+    /// @returns a uniform average of the horizonal sample within the given radius.
+    std::uint8_t calculate_gaussian_average_horizontal(
+        const Image& image,
+        const std::size_t pixel_index,
+        const std::vector<double>& weights,
+        const int radius
+    ) {
+        // guard against malformed gaussian kernels
+        if(weights.size() != 2 * radius + 1) {
+            throw std::invalid_argument("Mismatch between size of weights vector and number of evaluated indices");
+        }
+
+
+        std::size_t w{image.width};
+        std::size_t h{image.height};
+        std::size_t x{pixel_index % w};
+        std::size_t y{pixel_index / w};
+        int weighted_avg{};
+        int index{};
+
+        // evaluate per row
+        for(int offset{-radius}; offset <= radius; ++offset) {
+            const std::size_t candidate_i{pixel_index + offset};
+            const std::size_t sample_i{
+                x + offset < 0
+                    ? y * w
+                    : x + offset > w - 1
+                        ? y * w + w - 1 
+                        : candidate_i
+            };
+
+            weighted_avg += image.pixels.at(sample_i) * weights.at(index);
+            ++index;
+        }
+
+        return weighted_avg;
+    }
+
+    /// Calculates a weighted average of pixel brightness using vertical neighbors.
+    /// Replicates nearest neighbor for out of bounds indices.
+    /// Must be performed after the horizontal pass.
+    /// @returns a uniform average of the vertical sample within the given radius.
+    std::uint8_t calculate_gaussian_average_vertical(
+        const std::vector<double>& buffer,
+        const std::vector<double>& weights,
+        const int radius,
+        const std::size_t pixel_index,
+        const std::size_t w,
+        const std::size_t h
+    ) {
+        // guard against malformed gaussian kernels
+        if(weights.size() != 2 * radius + 1) {
+            throw std::invalid_argument("Mismatch between size of weights vector and number of evaluated indices");
+        }
+
+        std::size_t x{pixel_index % w};
+        std::size_t y{pixel_index / w};
+        int weighted_avg{};
+        int index{};
+
+        // evaluate per row
+        for(int row_offset{-radius}; row_offset <= radius; ++row_offset) {
+            const std::size_t candidate_i{pixel_index + row_offset * w};
+            const std::size_t sample_i{
+                candidate_i < 0
+                    ? x
+                    : candidate_i >= h
+                        ? y * w + x
+                        : candidate_i
+            };
+
+            weighted_avg += buffer.at(sample_i) * weights.at(index);
+            ++index;
+        }
+
+        // round to nearest integer and clamp to 0-255
+        return static_cast<std::uint8_t>(std::clamp(weighted_avg + 0.5, 0.0, 255.0));
+    }
+
+    /// Performs the horizontal then vertical pass of computing
+    /// new pixel values from the gaussian kernel weights for gaussian blur.
+    /// @returns the new pixel vector of the image with the gaussian blur operation applied
+    std::vector<std::uint8_t> calculate_gaussian_pixels(
+        const Image& image,
+        const std::vector<double>& weights,
+        const int radius
+    ) {
+        std::vector<double> buffer(image.width * image.height);
+        std::vector<std::uint8_t> blurred_pixels(image.width * image.height); 
+
+        // horizontal pass
+        for(int i{}; i < image.pixels.size(); ++i) {
+            buffer.at(i) = calculate_gaussian_average_horizontal(image, i, weights, radius);
+        }
+
+        // vertical pass
+        for(int i{}; i < image.pixels.size(); ++i) {
+            blurred_pixels.at(i) = calculate_gaussian_average_vertical(buffer, weights, radius, i, image.width, image.height);
+        }
+
+        return blurred_pixels;
+    }
+
+    /// Calculates a gaussian kernel with a specified radius and sigma variance.
+    /// @throws std::invalid_argument exception if the radius is negative, or sigma is nonpositive or infinite.
+    /// @throws std::overflow_error if the radius overflows beyond integer capacity.
+    /// @returns a double vector containing the weights produced by a gaussian curve with the given parameters.
+    std::vector<double> gaussian_kernel(int radius, double sigma) {
+
+        if(radius < 0) {
+            throw std::invalid_argument("radius must be a nonnegative argument");
+        }
+
+        if(radius > (std::numeric_limits<int>::max() - 1) / 2) {
+            throw std::overflow_error("radius overflows beyond integer capacity");
+        }
+
+        if(!std::isfinite(sigma) || sigma <= 0.0) {
+            throw std::invalid_argument("sigma must be positive and finite");
+        }
+
+        double sum{};
+        int index{};
+        std::vector<double> weights(2 * radius + 1);
+
+        for(int x{-radius}; x <= radius; ++x) {
+            double scaled{static_cast<double>(x) / sigma};
+            double weight{std::exp(-0.5 * scaled * scaled)};
+            weights.at(index) = weight;
+            sum += weight;
+            ++index;
+        }
+
+        // normalize weights
+        for(int i{}; i < weights.size(); ++i) {
+            weights.at(i) /= sum;
+        }
+
+        return weights;
+    }   
 }
 
 
@@ -97,7 +241,9 @@ Image to_grayscale(const Image& image) {
     return grayscale_image;
 }
 
-
+/// Performs a uniform blur using a 3x3 neighborhood sample average per pixel.
+/// @throws std::invalid_argument exception if the input image is not in a grayscale format.
+/// @returns an Image with a blur applied from a uniform average of the 3x3 neighborhood sample per pixel.
 Image box_blur(const Image& image) {
     image.validate();
     
@@ -105,7 +251,7 @@ Image box_blur(const Image& image) {
         throw std::invalid_argument("Box blur only supports grayscale images.");
     }
 
-    Image blurred_image = image;
+    Image blurred_image{image};
 
     for(std::size_t i{0}; i < image.pixels.size(); i++) {
         blurred_image.pixels.at(i) = calculate_average(image, i);
@@ -114,36 +260,23 @@ Image box_blur(const Image& image) {
     return blurred_image;
 }
 
-std::vector<double> gaussian_kernel(int radius, double sigma) {
 
-    if(radius < 0) {
-        throw std::invalid_argument("radius must be a nonnegative argument");
+/// Performs a gaussian blur parameterized by a radius and sigma variance value.
+/// @throws std::invalid_argument exception if the input image is not in a grayscale format.
+/// @returns the source image with the gaussian blur operation applied
+Image gaussian_blur(const Image& image, int radius, double sigma) {
+    image.validate();
+    
+    if(image.format != PixelFormat::Gray8) {
+        throw std::invalid_argument("Gaussian blur only supports grayscale images.");
     }
 
-    if(radius > (std::numeric_limits<int>::max() - 1) / 2) {
-        throw std::overflow_error("radius overflows beyond integer capacity");
-    }
+    Image blurred_image{image};
 
-    if(!std::isfinite(sigma) || sigma <= 0.0) {
-        throw std::invalid_argument("sigma must be positive and finite");
-    }
+    std::vector<double> weights(gaussian_kernel(radius, sigma));
+    std::vector<double> buffer(image.width * image.height);
+    
+    blurred_image.pixels = calculate_gaussian_pixels(image, weights, radius);
 
-    double sum{};
-    int index{};
-    std::vector<double> weights(2 * radius + 1);
-
-    for(int x{-radius}; x <= radius; ++x) {
-        double scaled{static_cast<double>(x) / sigma};
-        double weight{std::exp(-0.5 * scaled * scaled)};
-        weights.at(index) = weight;
-        sum += weight;
-        ++index;
-    }
-
-    // normalize weights
-    for(int i{}; i < weights.size(); ++i) {
-        weights.at(i) /= sum;
-    }
-
-    return weights;
+    return blurred_image;
 }

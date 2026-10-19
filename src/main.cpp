@@ -28,7 +28,8 @@ Supports PNG/JPEG input. The output directory must already exist.)";
     enum class Operation {
         Threshold, 
         Grayscale,
-        BoxBlur
+        BoxBlur,
+        GaussianBlur
     };
 
     // Convert cli argument to their corresponding operations.
@@ -41,6 +42,7 @@ Supports PNG/JPEG input. The output directory must already exist.)";
         if(operation == "--threshold") return Operation::Threshold;
         if(operation == "--grayscale") return Operation::Grayscale;
         if(operation == "--box-blur") return Operation::BoxBlur;
+        if(operation == "--gaussian-blur") return Operation::GaussianBlur;
 
         // Throw error if provided an invalid operation
         throw std::invalid_argument(
@@ -58,7 +60,7 @@ Supports PNG/JPEG input. The output directory must already exist.)";
         char**& current_pos,
         char** end
     ) {
-        if(current_pos + 1 == end) {
+        if(current_pos + 1 >= end) {
             throw std::invalid_argument("\"--threshold\" requires a grayscale cutoff parameter from 0-255");
         }
 
@@ -76,15 +78,44 @@ Supports PNG/JPEG input. The output directory must already exist.)";
         threshold(image, cutoff);
     }
 
-    /// Call the to_grayscale() operation and reassign the local image.
+    /// Call the to_grayscale operation and reassign the local image.
     void call_grayscale(Image& image) {
         image = to_grayscale(image); // converts the original image to its grayscale format
     }
-
-    /// 
-    /// Call the box_blur() operation and reassign the local image. 
+ 
+    /// Call the box_blur operation and reassign the local image. 
     void call_box_blur(Image& image) {
         image = box_blur(image); // converts original image to blurred representation
+    }
+
+    /// Parse sigma and radius positional arguments for Operation::GaussianBlur,
+    /// and call gaussian_blur from operations.cpp, modifying the image directly.
+    /// @throws std::invalid_argument if the cutoff is not an integer, or is outside [0, 255].
+    void call_gaussian_blur(
+        Image& image,
+        char**& current_pos,
+        char** end
+    ) {
+        if(current_pos + 2 >= end) {
+            throw std::invalid_argument("\"--gaussian-blur\" requires a supplied radius and sigma argument");
+        }
+
+        std::string radius_text{*++current_pos};
+        std::string sigma_text{*++current_pos};
+        std::size_t parsed_radius{0};
+        std::size_t parsed_sigma{0};
+        int radius{std::stoi(radius_text, &parsed_radius)};
+        double sigma{std::stod(sigma_text, &parsed_sigma)};
+
+        if(parsed_radius != radius_text.size()) {
+            throw std::invalid_argument("Radius must be a nonnegative integer");
+        }
+
+        if(parsed_sigma != sigma_text.size()) {
+            throw std::invalid_argument("Sigma must be supplied as a decimal value");
+        }
+
+        gaussian_blur(image, radius, sigma);
     }
 }
 
@@ -171,9 +202,15 @@ int main(int argc, char* argv[]) {
                             call_box_blur(image);
                             break;
                         }
+
+                        // Parses 2 positional arguments
+                        case Operation::GaussianBlur: {
+                            call_gaussian_blur(image, current_pos, end);
+                            break;
+                        }
                     }
 
-                    // Move ptr to next char* in argv
+                    // Move ptr to next char* in argv[]
                     ++current_pos;
                 }
                     
