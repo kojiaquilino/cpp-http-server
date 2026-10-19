@@ -15,19 +15,53 @@
 namespace {
     constexpr std::string_view usage = R"(
 Usage:
-    media_demo <input-image> <output.png>
-    media_demo <input-image> <output.png> --threshold <cutoff>
+    media_demo <input-image> <output.png> [operations...]
     media_demo --help
-    
-Copies an image to PNG, optionally applying grayscale thresholding.
-    --threshold <cutoff>  Black/white cutoff from 0 to 255; requires grayscale input.
-    --help, -h            Show this help message.
+    media_demo -h
 
-Supports PNG/JPEG input. The output directory must already exist.)";
+Loads a PNG/JPEG image, applies operations from left to right,
+and saves the result as PNG. Without operations, copies the image.
+
+Operations:
+    --grayscale
+        Convert RGB input to grayscale.
+
+    --threshold <cutoff>
+        Set pixels below cutoff to black; all others to white.
+        Cutoff must be an integer from 0 to 255.
+        Requires grayscale input.
+
+    --box-blur
+        Apply a 3x3 box blur. Requires grayscale input.
+
+    --gaussian-blur <radius> <sigma>
+        Apply Gaussian blur. Requires grayscale input.
+        Radius must be a nonnegative integer.
+        Sigma must be positive and finite; larger values increase blur.
+        A radius around 3 times sigma is recommended.
+        Radius 0 leaves pixels unchanged.
+
+Options:
+    --help, -h
+        Show this help message.
+
+Examples:
+    media_demo input.jpg copy.png
+    media_demo input.jpg gray.png --grayscale
+    media_demo input.jpg binary.png --grayscale --threshold 128
+    media_demo input.jpg blurred.png --grayscale --box-blur
+    media_demo input.jpg gaussian.png --grayscale --gaussian-blur 30 10.0
+
+Use --grayscale before operations that require grayscale input.
+Operations may be repeated. Quote paths containing spaces.
+The output directory must already exist.
+)";
 
     enum class Operation {
         Threshold, 
         Grayscale,
+        BoxBlur,
+        GaussianBlur
     };
 
     // Convert cli argument to their corresponding operations.
@@ -39,6 +73,8 @@ Supports PNG/JPEG input. The output directory must already exist.)";
         // Enumerate conversion to corresponding enum values
         if(operation == "--threshold") return Operation::Threshold;
         if(operation == "--grayscale") return Operation::Grayscale;
+        if(operation == "--box-blur") return Operation::BoxBlur;
+        if(operation == "--gaussian-blur") return Operation::GaussianBlur;
 
         // Throw error if provided an invalid operation
         throw std::invalid_argument(
@@ -56,7 +92,7 @@ Supports PNG/JPEG input. The output directory must already exist.)";
         char**& current_pos,
         char** end
     ) {
-        if(current_pos + 1 == end) {
+        if(current_pos + 1 >= end) {
             throw std::invalid_argument("\"--threshold\" requires a grayscale cutoff parameter from 0-255");
         }
 
@@ -74,9 +110,44 @@ Supports PNG/JPEG input. The output directory must already exist.)";
         threshold(image, cutoff);
     }
 
-    /// Call the to_grayscale() operation and reassign the local image.
+    /// Call the to_grayscale operation and reassign the local image.
     void call_grayscale(Image& image) {
         image = to_grayscale(image); // converts the original image to its grayscale format
+    }
+ 
+    /// Call the box_blur operation and reassign the local image. 
+    void call_box_blur(Image& image) {
+        image = box_blur(image); // converts original image to blurred representation
+    }
+
+    /// Parse sigma and radius positional arguments for Operation::GaussianBlur,
+    /// and call gaussian_blur from operations.cpp, modifying the image directly.
+    /// @throws std::invalid_argument if the cutoff is not an integer, or is outside [0, 255].
+    void call_gaussian_blur(
+        Image& image,
+        char**& current_pos,
+        char** end
+    ) {
+        if(current_pos + 2 >= end) {
+            throw std::invalid_argument("\"--gaussian-blur\" requires a supplied radius and sigma argument");
+        }
+
+        std::string radius_text{*++current_pos};
+        std::string sigma_text{*++current_pos};
+        std::size_t parsed_radius{0};
+        std::size_t parsed_sigma{0};
+        int radius{std::stoi(radius_text, &parsed_radius)};
+        double sigma{std::stod(sigma_text, &parsed_sigma)};
+
+        if(parsed_radius != radius_text.size()) {
+            throw std::invalid_argument("Radius must be a nonnegative integer");
+        }
+
+        if(parsed_sigma != sigma_text.size()) {
+            throw std::invalid_argument("Sigma must be supplied as a decimal value");
+        }
+
+        image = gaussian_blur(image, radius, sigma);
     }
 }
 
@@ -157,10 +228,22 @@ int main(int argc, char* argv[]) {
                             call_grayscale(image);
                             break;
                         }
+
+                        // Parses 0 positional arguments
+                        case Operation::BoxBlur: {
+                            call_box_blur(image);
+                            break;
+                        }
+
+                        // Parses 2 positional arguments
+                        case Operation::GaussianBlur: {
+                            call_gaussian_blur(image, current_pos, end);
+                            break;
+                        }
                     }
 
-                    // Move ptr to next char* in argv
-                    current_pos++;
+                    // Move ptr to next char* in argv[]
+                    ++current_pos;
                 }
                     
                 save_png(image, output_path);
@@ -170,7 +253,7 @@ int main(int argc, char* argv[]) {
         }
     } catch (const std::exception& error) {
         std::cout << usage << "\n\n";
-        std::cerr << ("Error: " + static_cast<std::string>(error.what())) << "\n\n";
+        std::cerr << ("ERROR: " + static_cast<std::string>(error.what())) << "\n\n";
         return 1;
     }
 }
