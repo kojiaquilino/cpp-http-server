@@ -10,7 +10,6 @@
 
 
 namespace {
-
     /// Calulates uniform average of pixel brightness in a 3x3 neighborhood sample.
     /// Replicates nearest neighbor for out of bounds indices. 
     /// @returns a uniform average of the 3x3 neighborhood sample.
@@ -20,7 +19,7 @@ namespace {
         std::size_t x{index % w};
         std::size_t y{index / w};
 
-        std::size_t top_y{y > 0 ? y - 1 : y};
+        std::size_t top_y{y >= 1 ? y - 1 : y};
         std::size_t bottom_y{y + 1 < h ? y + 1 : y};
         int sum{};
 
@@ -28,7 +27,8 @@ namespace {
         for(int offset{-1}; offset <= 1; ++offset) {
             const std::size_t candidate_x{x + offset};
             const std::size_t sample_x{ 
-                candidate_x < 0
+                // prevent integer underflow by checking bounds first
+                offset < 0 && x < static_cast<std::size_t>(-offset)
                     ? 0
                     : candidate_x >= w
                         ? w - 1 
@@ -74,7 +74,8 @@ namespace {
         for(int offset{-radius}; offset <= radius; ++offset) {
             const std::size_t candidate_i{pixel_index + offset};
             const std::size_t sample_i{
-                x < -offset // negative offset, since we want to compare the positive values when offset is negative
+                // prevent integer underflow by checking bounds first
+                offset < 0 && x < static_cast<std::size_t>(-offset)
                     ? y * w
                     : x + offset > w - 1
                         ? y * w + w - 1 
@@ -114,10 +115,11 @@ namespace {
         for(int row_offset{-radius}; row_offset <= radius; ++row_offset) {
             const std::size_t candidate_i{(y + row_offset) * w + x};
             const std::size_t sample_i{
-                y < -row_offset // negative offset, since we want to compare the positive values when offset is negative
+                // prevent integer underflow by checking bounds first
+                row_offset < 0 && y < static_cast<std::size_t>(-row_offset)
                     ? x
                     : y + row_offset >= h // valid values are [0, h-1], since y is zero-indexed
-                        ? y * w + x
+                        ? (h - 1) * w + x
                         : candidate_i
             };
 
