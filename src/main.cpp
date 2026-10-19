@@ -253,7 +253,7 @@ int main(int argc, char* argv[]) {
         }
     } catch (const std::exception& error) {
         std::cout << usage << "\n\n";
-        std::cerr << ("Error: " + static_cast<std::string>(error.what())) << "\n\n";
+        std::cerr << ("ERROR: " + static_cast<std::string>(error.what())) << "\n\n";
         return 1;
     }
 }
