@@ -15,15 +15,47 @@
 namespace {
     constexpr std::string_view usage = R"(
 Usage:
-    media_demo <input-image> <output.png>
-    media_demo <input-image> <output.png> --threshold <cutoff>
+    media_demo <input-image> <output.png> [operations...]
     media_demo --help
-    
-Copies an image to PNG, optionally applying grayscale thresholding.
-    --threshold <cutoff>  Black/white cutoff from 0 to 255; requires grayscale input.
-    --help, -h            Show this help message.
+    media_demo -h
 
-Supports PNG/JPEG input. The output directory must already exist.)";
+Loads a PNG/JPEG image, applies operations from left to right,
+and saves the result as PNG. Without operations, copies the image.
+
+Operations:
+    --grayscale
+        Convert RGB input to grayscale.
+
+    --threshold <cutoff>
+        Set pixels below cutoff to black; all others to white.
+        Cutoff must be an integer from 0 to 255.
+        Requires grayscale input.
+
+    --box-blur
+        Apply a 3x3 box blur. Requires grayscale input.
+
+    --gaussian-blur <radius> <sigma>
+        Apply Gaussian blur. Requires grayscale input.
+        Radius must be a nonnegative integer.
+        Sigma must be positive and finite; larger values increase blur.
+        A radius around 3 times sigma is recommended.
+        Radius 0 leaves pixels unchanged.
+
+Options:
+    --help, -h
+        Show this help message.
+
+Examples:
+    media_demo input.jpg copy.png
+    media_demo input.jpg gray.png --grayscale
+    media_demo input.jpg binary.png --grayscale --threshold 128
+    media_demo input.jpg blurred.png --grayscale --box-blur
+    media_demo input.jpg gaussian.png --grayscale --gaussian-blur 30 10.0
+
+Use --grayscale before operations that require grayscale input.
+Operations may be repeated. Quote paths containing spaces.
+The output directory must already exist.
+)";
 
     enum class Operation {
         Threshold, 
