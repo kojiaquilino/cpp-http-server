@@ -51,7 +51,7 @@ namespace {
     /// Replicates nearest neighbor for out of bounds indices.
     /// Must be performed before the vertical pass. 
     /// @returns a uniform average of the horizonal sample within the given radius.
-    std::uint8_t calculate_gaussian_average_horizontal(
+    double calculate_gaussian_average_horizontal(
         const Image& image,
         const std::size_t pixel_index,
         const std::vector<double>& weights,
@@ -67,14 +67,14 @@ namespace {
         std::size_t h{image.height};
         std::size_t x{pixel_index % w};
         std::size_t y{pixel_index / w};
-        int weighted_avg{};
+        double weighted_avg{};
         int index{};
 
         // evaluate per row
         for(int offset{-radius}; offset <= radius; ++offset) {
             const std::size_t candidate_i{pixel_index + offset};
             const std::size_t sample_i{
-                x + offset < 0
+                x < -offset // negative offset, since we want to compare the positive values when offset is negative
                     ? y * w
                     : x + offset > w - 1
                         ? y * w + w - 1 
@@ -107,16 +107,16 @@ namespace {
 
         std::size_t x{pixel_index % w};
         std::size_t y{pixel_index / w};
-        int weighted_avg{};
+        double weighted_avg{};
         int index{};
 
         // evaluate per row
         for(int row_offset{-radius}; row_offset <= radius; ++row_offset) {
-            const std::size_t candidate_i{pixel_index + row_offset * w};
+            const std::size_t candidate_i{(y + row_offset) * w + x};
             const std::size_t sample_i{
-                candidate_i < 0
+                y < -row_offset // negative offset, since we want to compare the positive values when offset is negative
                     ? x
-                    : candidate_i >= h
+                    : y + row_offset >= h // valid values are [0, h-1], since y is zero-indexed
                         ? y * w + x
                         : candidate_i
             };

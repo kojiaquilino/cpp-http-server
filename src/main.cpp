@@ -115,7 +115,7 @@ Supports PNG/JPEG input. The output directory must already exist.)";
             throw std::invalid_argument("Sigma must be supplied as a decimal value");
         }
 
-        gaussian_blur(image, radius, sigma);
+        image = gaussian_blur(image, radius, sigma);
     }
 }
 
