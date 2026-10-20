@@ -19,27 +19,36 @@ Usage:
     media_demo --help
     media_demo -h
 
-Loads a PNG/JPEG image, applies operations from left to right,
-and saves the result as PNG. Without operations, copies the image.
+Load a PNG/JPEG image, apply operations from left to right,
+and save the result as PNG. Without operations, copy the image.
 
 Operations:
     --grayscale
         Convert RGB input to grayscale.
+        Rejects input that is already grayscale.
 
     --threshold <cutoff>
-        Set pixels below cutoff to black; all others to white.
+        Set pixels below cutoff to 0; all others to 255.
         Cutoff must be an integer from 0 to 255.
         Requires grayscale input.
 
     --box-blur
-        Apply a 3x3 box blur. Requires grayscale input.
+        Apply a fixed 3x3 box blur.
+        Requires grayscale input.
 
     --gaussian-blur <radius> <sigma>
-        Apply Gaussian blur. Requires grayscale input.
+        Apply Gaussian blur using horizontal and vertical passes.
         Radius must be a nonnegative integer.
-        Sigma must be positive and finite; larger values increase blur.
-        A radius around 3 times sigma is recommended.
+        Sigma must be positive and finite.
         Radius 0 leaves pixels unchanged.
+        A radius around 3 times sigma is a useful starting point.
+        Requires grayscale input.
+
+    --sobel
+        Detect edges using Sobel gradient magnitude.
+        Flat areas appear black; stronger edges appear brighter.
+        Magnitudes are rounded and clamped to 0-255.
+        Requires grayscale input.
 
 Options:
     --help, -h
@@ -50,11 +59,19 @@ Examples:
     media_demo input.jpg gray.png --grayscale
     media_demo input.jpg binary.png --grayscale --threshold 128
     media_demo input.jpg blurred.png --grayscale --box-blur
-    media_demo input.jpg gaussian.png --grayscale --gaussian-blur 30 10.0
+    media_demo input.jpg gaussian.png --grayscale --gaussian-blur 3 1.0
+    media_demo input.jpg edges.png --grayscale --sobel
+    media_demo input.jpg smooth-edges.png --grayscale --gaussian-blur 3 1.0 --sobel
 
-Use --grayscale before operations that require grayscale input.
-Operations may be repeated. Quote paths containing spaces.
-The output directory must already exist.
+Notes:
+    - For RGB input, use --grayscale before grayscale-only operations.
+    - Grayscale input can be processed directly.
+    - Blur and Sobel operations replicate the nearest edge pixel
+    - when sampling outside the image.
+    - Operations execute in the order supplied and may be repeated
+    - when their input-format requirements are satisfied.
+    - Output is always PNG. Use a .png extension.
+    - The output directory must already exist.
 )";
 
     enum class Operation {
