@@ -6,10 +6,26 @@
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
+#include <utility>
 #include <vector>
 
 
 namespace {
+
+    // sobel kernels/convolution matrices
+    constexpr int sobel_x[3][3] {
+        {-1,  0,  1},
+        {-2,  0,  2},
+        {-1,  0,  1}
+    };
+
+    constexpr int sobel_y[3][3] {
+        {-1, -1, -1},
+        { 0,  0,  0},
+        { 1,  2,  1}
+    };
+
+
     /// Calulates uniform average of pixel brightness in a 3x3 neighborhood sample.
     /// Replicates nearest neighbor for out of bounds indices. 
     /// @returns a uniform average of the 3x3 neighborhood sample.
@@ -191,7 +207,48 @@ namespace {
         }
 
         return weights;
-    }   
+    }
+
+    /// Calculates the brightness changes around one pixel.
+    /// @returns components of the intensity gradient
+    std::pair<int, int> calculate_sobel_values(const Image& image, const int index) {
+        
+        std::size_t w{image.width};
+        std::size_t h{image.height};
+        std::size_t x{index % w};
+        std::size_t y{index / w};
+
+        std::size_t top_y{y >= 1 ? y - 1 : y};
+        std::size_t bottom_y{y + 1 < h ? y + 1 : y};
+        int gx{}, gy{};
+
+        // evaluate per column
+        for(int offset{-1}; offset <= 1; ++offset) {
+            const std::size_t candidate_x{x + offset};
+            const std::size_t sample_x{ 
+                // prevent integer underflow by checking bounds first
+                offset < 0 && x < static_cast<std::size_t>(-offset)
+                    ? 0
+                    : candidate_x >= w
+                        ? w - 1 
+                        : candidate_x
+            };
+
+            std::size_t top_index{top_y * w + sample_x};
+            std::size_t mid_index{y * w + sample_x};
+            std::size_t bot_index{bottom_y * w + sample_x};
+
+            gx += sobel_x[0][offset+1] * image.pixels.at(top_index);
+            gx += sobel_x[1][offset+1] * image.pixels.at(mid_index);
+            gx += sobel_x[2][offset+1] * image.pixels.at(bot_index);
+
+            gy += sobel_y[0][offset+1] * image.pixels.at(top_index);
+            gy += sobel_y[1][offset+1] * image.pixels.at(mid_index);
+            gy += sobel_y[2][offset+1] * image.pixels.at(bot_index);
+        }
+
+        return {gx, gy};
+    }
 }
 
 
@@ -222,7 +279,7 @@ Image to_grayscale(const Image& image) {
 
     std::size_t pixel_index{0}; 
     std::vector<std::uint8_t> grayscale_pixels(image.width * image.height);
-    Image grayscale_image{
+    Image output{
         image.width,
         image.height,
         PixelFormat::Gray8,
@@ -236,11 +293,11 @@ Image to_grayscale(const Image& image) {
 
         // approximate brightness value calcualted by rgb values
         const std::uint32_t luma{static_cast<std::uint32_t>((299 * r + 587 * g + 114 * b + 500) / 1000)};
-        grayscale_image.pixels.at(pixel_index) = luma;
+        output.pixels.at(pixel_index) = luma;
         ++pixel_index;
     }
 
-    return grayscale_image;
+    return output;
 }
 
 /// Performs a uniform blur using a 3x3 neighborhood sample average per pixel.
@@ -253,13 +310,13 @@ Image box_blur(const Image& image) {
         throw std::invalid_argument("Box blur only supports grayscale images.");
     }
 
-    Image blurred_image{image};
+    Image output{image};
 
     for(std::size_t i{0}; i < image.pixels.size(); i++) {
-        blurred_image.pixels.at(i) = calculate_average(image, i);
+        output.pixels.at(i) = calculate_average(image, i);
     }
 
-    return blurred_image;
+    return output;
 }
 
 
@@ -273,12 +330,35 @@ Image gaussian_blur(const Image& image, int radius, double sigma) {
         throw std::invalid_argument("Gaussian blur only supports grayscale images.");
     }
 
-    Image blurred_image{image};
+    Image output{image};
 
     std::vector<double> weights(gaussian_kernel(radius, sigma));
     std::vector<double> buffer(image.width * image.height);
     
-    blurred_image.pixels = calculate_gaussian_pixels(image, weights, radius);
+    output.pixels = calculate_gaussian_pixels(image, weights, radius);
 
-    return blurred_image;
+    return output;
+}
+
+/// Performs a sobel edge detection on the input image.
+/// @throws std::invalid_argument exception if the input image is not in a grayscale format.
+/// @returns the source image with sobel edge detection applied
+Image sobel(const Image& image) {
+    image.validate();
+
+    if(image.format != PixelFormat::Gray8) {
+        throw std::invalid_argument("Sobel edge detection only supports grayscale images.");
+    }
+
+    Image output = image;
+
+    for(int i{0}; i < image.pixels.size(); ++i) {
+        auto [gx, gy] = calculate_sobel_values(image, i);
+        double magnitude{std::hypot(gx, gy)};
+        output.pixels.at(i) = static_cast<std::uint8_t>(
+            std::clamp(std::round(magnitude), 0.0, 255.0)
+        );
+    }
+
+    return output;
 }

@@ -61,7 +61,8 @@ The output directory must already exist.
         Threshold, 
         Grayscale,
         BoxBlur,
-        GaussianBlur
+        GaussianBlur,
+        Sobel
     };
 
     // Convert cli argument to their corresponding operations.
@@ -75,6 +76,7 @@ The output directory must already exist.
         if(operation == "--grayscale") return Operation::Grayscale;
         if(operation == "--box-blur") return Operation::BoxBlur;
         if(operation == "--gaussian-blur") return Operation::GaussianBlur;
+        if(operation == "--sobel") return Operation::Sobel;
 
         // Throw error if provided an invalid operation
         throw std::invalid_argument(
@@ -148,6 +150,12 @@ The output directory must already exist.
         }
 
         image = gaussian_blur(image, radius, sigma);
+    }
+
+
+    /// Call the sobel operation and reassign the local image.
+    void call_sobel(Image& image) {
+        image = sobel(image); // convert to sobel image
     }
 }
 
@@ -238,6 +246,12 @@ int main(int argc, char* argv[]) {
                         // Parses 2 positional arguments
                         case Operation::GaussianBlur: {
                             call_gaussian_blur(image, current_pos, end);
+                            break;
+                        }
+
+                        // Parses 0 positional argument
+                        case Operation::Sobel: {
+                            call_sobel(image);
                             break;
                         }
                     }
