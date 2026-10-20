@@ -20,7 +20,7 @@ namespace {
     };
 
     constexpr int sobel_y[3][3] {
-        {-1, -1, -1},
+        {-1, -2, -1},
         { 0,  0,  0},
         { 1,  2,  1}
     };
@@ -211,7 +211,7 @@ namespace {
 
     /// Calculates the brightness changes around one pixel.
     /// @returns components of the intensity gradient
-    std::pair<int, int> calculate_sobel_values(const Image& image, const int index) {
+    std::pair<int, int> calculate_sobel_values(const Image& image, const std::size_t index) {
         
         std::size_t w{image.width};
         std::size_t h{image.height};
@@ -352,7 +352,7 @@ Image sobel(const Image& image) {
 
     Image output = image;
 
-    for(int i{0}; i < image.pixels.size(); ++i) {
+    for(std::size_t i{0}; i < image.pixels.size(); ++i) {
         auto [gx, gy] = calculate_sobel_values(image, i);
         double magnitude{std::hypot(gx, gy)};
         output.pixels.at(i) = static_cast<std::uint8_t>(
