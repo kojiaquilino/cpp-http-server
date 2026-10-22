@@ -2,7 +2,8 @@ cmake_minimum_required(VERSION 3.23)
 project(cpp_media_library CXX)
 
 # Add project library media_core
-add_library(media_core src/image.cpp src/operations.cpp)
+add_library(media_core src/image.cpp src/operations.cpp
+    src/pipeline.cpp)
 target_include_directories(media_core PUBLIC include)
 target_compile_features(media_core PUBLIC cxx_std_20)
 
