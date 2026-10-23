@@ -1,131 +1,271 @@
 # cpp-media-library
-A C++20 image library and command-line tool.
-The current application loads an image and saves its pixels as PNG.
 
-## Current capabilities
+A C++20 image-processing library and command-line tool.
 
-- Load PNG/JPEG images into owned, tightly packed RGB8 pixel buffers.
-- Save Gray8 or RGB8 images as PNG.
-- Convert files using input and output paths supplied on the command line.
-- Report invalid arguments and file I/O errors with a nonzero exit code.
+Supports grayscale conversion, thresholding, box blur, Gaussian blur, and
+Sobel edge detection through an ordered operation pipeline.
 
-Alpha-channel input is rejected. Filters, video, and GPU processing are future
-work. Grayscale input is expanded to RGB8 when loaded. Output is always PNG,
-regardless of the output filename; use a `.png` extension.
+```sh
+media_demo input.jpg edges.png --grayscale --gaussian-blur 3 1.0 --sobel
+```
 
-## Prerequisites
+## Features
 
-- CMake 3.23 or newer for the project itself.
-- A compiler with C++20 support.
-- The build tool required by your CMake generator.
+- PNG/JPEG input and PNG output.
+- Owned, tightly packed Gray8 and RGB8 pixel buffers.
+- Image dimension, format, and storage validation.
+- Sequential CPU image-processing operations.
+- Configurable operation chains.
+- Separate processing, file I/O, and CLI components.
+
+## Requirements
+
+- CMake 3.23 or newer.
+- A compiler supporting C++20.
+- A build tool compatible with the selected CMake generator.
 
 Image decoding and encoding use the vendored
-[stb headers](https://github.com/nothings/stb) in `third_party/stb`; no separate
-image-library installation is needed.
+[stb libraries](https://github.com/nothings/stb). No separate image-library
+installation is required.
 
-The following commands demonstrate how to set up your environment and compile this program.
-Keep build directories separate for different platforms, compilers, and generators.
+## Build
 
-## Build on macOS
+Clone the repository:
 
-Install Apple's Xcode Command Line Tools for `clang++` and `make`:
+```sh
+git clone https://github.com/kojiaquilino/cpp-media-library.git
+cd cpp-media-library
+```
+
+Run build commands from the repository root. Use separate build directories
+for different compilers and generators.
+
+### Linux
+
+Install CMake, GCC or Clang, and GNU Make.
+
+```sh
+cmake -S . -B build-linux -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
+cmake --build build-linux --parallel 2
+./build-linux/media_demo --help
+```
+
+### macOS
+
+Install Apple's Command Line Tools:
 
 ```sh
 xcode-select --install
 ```
 
-Complete the installation dialog before continuing. Install CMake, for example
-with an existing [Homebrew](https://brew.sh) installation:
+Install CMake through Homebrew or [cmake.org](https://cmake.org/download/),
+then build:
 
 ```sh
-brew install cmake
-```
-
-Alternatively, install it from [cmake.org](https://cmake.org/download/) and make
-`cmake` available in your terminal.
-
-Build using the repository script:
-
-```sh
-.\build.sh
-```
-
-The script configures a Debug build using `clang++`, terminating after any encountered failures.
-Equivalent manual commands are:
-
-```sh
-cmake -S . -B build-macos -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug -DCMAKE_CXX_COMPILER=clang++
+cmake -S . -B build-macos -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER=clang++
 cmake --build build-macos --parallel 2
+./build-macos/media_demo --help
 ```
 
-Run help for usage instructions, or upload a PNG/JPEG image to convert into PNG format:
+Alternatively, use the repository script for a Debug build:
 
 ```sh
-./build-macos/media_demo --help
-./build-macos/media_demo input_filepath.jpeg output_filepath.png
+bash build.sh
 ```
 
-## Build on Windows
+### Windows
 
-The current PowerShell script targets Visual Studio 2026's MSVC compiler, using
-CMake's `Visual Studio 18 2026` generator. Install Visual Studio's C++ desktop
-build tools and a CMake version that supports that generator.
+The PowerShell script targets Visual Studio 2026 with CMake's
+`Visual Studio 18 2026` generator.
 
-From PowerShell:
+Install Visual Studio's C++ desktop build tools and a CMake version supporting
+that generator.
 
 ```powershell
 .\build.ps1
 .\build\Debug\media_demo.exe --help
-.\build\Debug\media_demo.exe test\IMG_5618.jpeg build\output.png
 ```
 
-The script builds the Debug executable and stops on failure. If using another
-Visual Studio version, configure a separate build directory with the matching
-generator rather than reusing a directory configured for another toolchain.
-
-## Build on Linux
-
-Install CMake, a C++20 compiler such as GCC, and GNU Make using your system's
-package manager. Then run:
-
-```sh
-cmake -S . -B build-linux -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
-cmake --build build-linux --parallel 2
-./build-linux/media_demo --help
-./build-linux/media_demo test/IMG_5618.jpeg build-linux/output.png
-```
+For other Visual Studio versions, configure a separate build directory with
+the matching generator.
 
 ## Command-line usage
 
 ```text
-media_demo <input-image> <output.png>
+media_demo <input-image> <output.png> [operations...]
 media_demo --help
 media_demo -h
 ```
 
-The output directory must already exist. A relative path is resolved from the
-terminal's current working directory. Quote paths containing spaces:
+Operations execute from left to right. Each operation processes the result
+of the previous operation. Without operations, the application loads the
+image and saves its decoded pixels as PNG.
+
+The examples below use the Linux executable path. Substitute
+`./build-macos/media_demo` on macOS or `.\build\Debug\media_demo.exe` on Windows.
+
+### Examples
+
+Copy an image to PNG:
 
 ```sh
-./build-macos/media_demo "photos/my photo.jpg" "build-macos/my output.png"
+./build-linux/media_demo input.jpg output.png
 ```
 
-A successful conversion prints the input dimensions, pixel byte count, and
-output path. RGB8 uses three bytes per pixel, so the byte count is
-`width × height × 3`. PNG compression is lossless relative to the decoded image.
+Convert to grayscale:
 
-Help and successful conversions exit with `0`. Invalid argument counts,
-missing/corrupt input, unsupported alpha input, and output failures exit with a
-nonzero status. Errors are written to standard error.
+```sh
+./build-linux/media_demo input.jpg gray.png --grayscale
+```
 
-## Library layout
+Apply thresholding:
 
-- `media_core`: the `Image` type, pixel formats, and representation validation.
-- `media_io`: stb implementations, image loading, and PNG saving; depends on
-  `media_core`.
-- `media_demo`: the CLI executable; links to `media_io`.
+```sh
+./build-linux/media_demo input.jpg binary.png --grayscale --threshold 128
+```
 
-Public headers live in `include/media/`; implementations live in `src/`.
+Apply box blur:
 
-## Future Plans
-More work is to come in developing further features and tools available in this CLI image library tool. CUDA integration for multicore GPU processing is also planned in the future, as well as supporting video formats.
+```sh
+./build-linux/media_demo input.jpg blurred.png --grayscale --box-blur
+```
+
+Apply Gaussian blur:
+
+```sh
+./build-linux/media_demo input.jpg gaussian.png --grayscale --gaussian-blur 3 1.0
+```
+
+Smooth an image and detect edges:
+
+```sh
+./build-linux/media_demo input.jpg edges.png --grayscale --gaussian-blur 3 1.0 --sobel
+```
+
+### Operations
+
+| Option | Required input | Parameters |
+|---|---|---|
+| `--grayscale` | RGB8 | None |
+| `--threshold <cutoff>` | Gray8 | Integer cutoff from `0` to `255` |
+| `--box-blur` | Gray8 | None |
+| `--gaussian-blur <radius> <sigma>` | Gray8 | Nonnegative integer radius; positive, finite sigma |
+| `--sobel` | Gray8 | None |
+
+For RGB input, use `--grayscale` before grayscale-only operations.
+Gray8 input can be processed directly. Applying `--grayscale` to Gray8 input
+returns the image unmodified.
+
+Operations may be repeated when their format requirements remain satisfied.
+An incompatible operation stops the pipeline without saving an intermediate
+result.
+
+### Paths and exit codes
+
+- The output directory must already exist.
+- Relative paths are resolved from the terminal's current working directory.
+- Paths containing spaces must be quoted.
+- Output is always PNG; use a `.png` extension.
+- Successful processing and help return `0`.
+- Invalid arguments, incompatible operations, and I/O failures return a
+  nonzero exit code.
+- Errors are written to standard error.
+
+## Processing details
+
+### Image representation
+
+| Format | Channels | Storage |
+|---|---|---|
+| Gray8 | One grayscale channel | One byte per pixel |
+| RGB8 | Red, green, blue | Three bytes per pixel |
+
+Pixels use unsigned 8-bit channel values from `0` to `255`, stored in
+row-major order with tightly packed rows. Grayscale input remains Gray8;
+color input is loaded as RGB8. Alpha-channel input is rejected.
+
+### Algorithms
+
+| Operation | Behavior |
+|---|---|
+| Grayscale | Uses `(299R + 587G + 114B + 500) / 1000` for integer rounding. |
+| Threshold | Values below the cutoff become `0`; values at or above it become `255`. |
+| Box blur | Computes a rounded uniform average over a 3×3 neighborhood. |
+| Gaussian blur | Applies a normalized one-dimensional kernel in horizontal and vertical passes, retaining floating-point intermediates. |
+| Sobel | Computes horizontal and vertical gradients, then rounds and clamps their Euclidean magnitude to `0–255`. |
+
+Blur and Sobel operations replicate the nearest edge pixel for
+out-of-bounds samples.
+
+Gaussian radius controls the neighborhood size; sigma controls the spread of
+the weights. A radius around three times sigma is a useful starting point.
+Radius `0` leaves pixels unchanged.
+
+Sobel produces dark output in constant regions and brighter output at
+stronger edges. Large magnitudes saturate at white. Gaussian blur can be
+applied before Sobel to reduce responses to noise and fine texture.
+
+PNG encoding is lossless relative to the processed pixel data. Converting
+a JPEG does not restore information lost through JPEG compression.
+
+## C++ API
+
+Individual operations are declared in `media/operations.hpp`. Ordered chains
+are declared in `media/pipeline.hpp`.
+
+```cpp
+#include "media/image_io.hpp"
+#include "media/pipeline.hpp"
+
+#include <exception>
+#include <iostream>
+#include <vector>
+
+int main() {
+    try {
+        Image input = load_image("input.jpg");
+
+        std::vector<PipelineOperation> operations{
+            GrayscaleOperation{},
+            GaussianBlurOperation{3, 1.0},
+            SobelOperation{}
+        };
+
+        Image output = apply_pipeline(input, operations);
+        save_png(output, "edges.png");
+    } catch (const std::exception& error) {
+        std::cerr << error.what() << '\n';
+        return 1;
+    }
+}
+```
+
+`apply_pipeline` preserves the original image and returns a new image.
+An empty chain returns an independent copy. Invalid image data, parameters,
+or operation ordering raise exceptions.
+
+Within the project's CMake build, link callers against `media_core` for
+processing or `media_io` for processing with image loading and saving.
+
+## Project structure
+
+```text
+include/media/    Public library headers
+src/             Library implementations and CLI
+third_party/stb/ Image decoding and encoding dependencies
+docs/            Technical documentation and development roadmap
+```
+
+| CMake target | Responsibility |
+|---|---|
+| `media_core` | Image representation, validation, operations, and pipelines |
+| `media_io` | Image loading and PNG saving; depends on `media_core` |
+| `media_demo` | Command-line application; links to `media_io` |
+
+## Current scope
+
+Processing currently uses the sequential CPU backend and supports Gray8 and
+RGB8 images. Filtering operations require Gray8 input.
+
+Parallel CPU execution, CUDA, resizing, restoration, and video processing are
+planned extensions.
