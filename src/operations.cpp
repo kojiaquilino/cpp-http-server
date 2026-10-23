@@ -274,7 +274,7 @@ Image to_grayscale(const Image& image) {
     image.validate();
 
     if(image.format == PixelFormat::Gray8) {
-        throw std::invalid_argument("Image is already in a grayscale format");
+        return image;
     }
 
     std::size_t pixel_index{0}; 
