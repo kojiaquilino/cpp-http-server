@@ -5,7 +5,7 @@
 #include <type_traits>
 #include <variant>
 
-Image apply_pipeline(const Image& image, const std::vector<Operation>& operations) {
+Image apply_pipeline(const Image& image, const std::vector<PipelineOperation>& operations) {
     image.validate();
     Image output{image};
 

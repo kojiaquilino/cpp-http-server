@@ -12,7 +12,7 @@ struct BoxBlurOperation {};
 struct GaussianBlurOperation { int radius; double sigma; };
 struct SobelOperation {};
 
-using Operation = std::variant<
+using PipelineOperation = std::variant<
     GrayscaleOperation,
     ThresholdOperation,
     BoxBlurOperation,
@@ -20,4 +20,4 @@ using Operation = std::variant<
     SobelOperation
 >;
 
-Image apply_pipeline(const Image& image, const std::vector<Operation>& operations);
+Image apply_pipeline(const Image& image, const std::vector<PipelineOperation>& operations);
