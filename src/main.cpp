@@ -109,7 +109,6 @@ Notes:
     /// and adds the threshold operation to the pipeline of operations.
     /// @throws std::invalid_argument if the cutoff is not an integer, or is outside [0, 255].
     void add_threshold(
-        Image& image,
         char**& current_pos,
         char** end,
         std::vector<PipelineOperation>& operations
@@ -133,12 +132,12 @@ Notes:
     }
 
     /// Adds the to_grayscale operation to the pipeline of operations.
-    void add_grayscale(Image& image, std::vector<PipelineOperation>& operations) {
+    void add_grayscale(std::vector<PipelineOperation>& operations) {
         operations.push_back(PipelineOperation{GrayscaleOperation{}});
     }
  
     /// Adds the box_blur operation to the pipeline of operations.
-    void add_box_blur(Image& image, std::vector<PipelineOperation>& operations) {
+    void add_box_blur(std::vector<PipelineOperation>& operations) {
         operations.push_back(PipelineOperation{BoxBlurOperation{}});
     }
 
@@ -146,7 +145,6 @@ Notes:
     /// and adds the gaussian_blur operation to the pipeline of operations.
     /// @throws std::invalid_argument if the cutoff is not an integer, or is outside [0, 255].
     void add_gaussian_blur(
-        Image& image,
         char**& current_pos,
         char** end,
         std::vector<PipelineOperation>& operations
@@ -175,7 +173,7 @@ Notes:
 
 
     /// Adds the sobel operation to the pipeline of operations.
-    void add_sobel(Image& image, std::vector<PipelineOperation>& operations) {
+    void add_sobel(std::vector<PipelineOperation>& operations) {
         operations.push_back(PipelineOperation{SobelOperation{}});
     }
 }
@@ -251,31 +249,31 @@ int main(int argc, char* argv[]) {
                     
                         // Parses 1 positional argument
                         case Operation::Threshold: {
-                            add_threshold(image, current_pos, end, operations);                            
+                            add_threshold(current_pos, end, operations);                            
                             break;
                         }
 
                         // Parses 0 positional arguments
                         case Operation::Grayscale: {
-                            add_grayscale(image, operations);
+                            add_grayscale(operations);
                             break;
                         }
 
                         // Parses 0 positional arguments
                         case Operation::BoxBlur: {
-                            add_box_blur(image, operations);
+                            add_box_blur(operations);
                             break;
                         }
 
                         // Parses 2 positional arguments
                         case Operation::GaussianBlur: {
-                            add_gaussian_blur(image, current_pos, end, operations);
+                            add_gaussian_blur(current_pos, end, operations);
                             break;
                         }
 
                         // Parses 0 positional argument
                         case Operation::Sobel: {
-                            add_sobel(image, operations);
+                            add_sobel(operations);
                             break;
                         }
                     }
