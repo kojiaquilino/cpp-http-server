@@ -1,6 +1,7 @@
 #include "media/image.hpp"
 #include "media/image_io.hpp"
 #include "media/operations.hpp"
+#include "media/pipeline.hpp"
 
 #include <algorithm>
 #include <array>
@@ -8,6 +9,7 @@
 #include <iostream>
 #include <string>
 #include <string_view>
+#include <vector>
 
 
 
@@ -104,12 +106,12 @@ Notes:
     //// Operation-specific wrapper functions ////
 
     /// Parse the cutoff positional argument for Operation::Threshold,
-    /// and call threshold from operations.cpp, modifying the image directly.
+    /// and adds the threshold operation to the pipeline of operations.
     /// @throws std::invalid_argument if the cutoff is not an integer, or is outside [0, 255].
-    void call_threshold(
-        Image& image,
+    void add_threshold(
         char**& current_pos,
-        char** end
+        char** end,
+        std::vector<PipelineOperation>& operations
     ) {
         if(current_pos + 1 >= end) {
             throw std::invalid_argument("\"--threshold\" requires a grayscale cutoff parameter from 0-255");
@@ -126,26 +128,26 @@ Notes:
         }
 
         auto cutoff = static_cast<std::uint8_t>(value);
-        threshold(image, cutoff);
+        operations.push_back(PipelineOperation{ThresholdOperation{cutoff}});
     }
 
-    /// Call the to_grayscale operation and reassign the local image.
-    void call_grayscale(Image& image) {
-        image = to_grayscale(image); // converts the original image to its grayscale format
+    /// Adds the to_grayscale operation to the pipeline of operations.
+    void add_grayscale(std::vector<PipelineOperation>& operations) {
+        operations.push_back(PipelineOperation{GrayscaleOperation{}});
     }
  
-    /// Call the box_blur operation and reassign the local image. 
-    void call_box_blur(Image& image) {
-        image = box_blur(image); // converts original image to blurred representation
+    /// Adds the box_blur operation to the pipeline of operations.
+    void add_box_blur(std::vector<PipelineOperation>& operations) {
+        operations.push_back(PipelineOperation{BoxBlurOperation{}});
     }
 
     /// Parse sigma and radius positional arguments for Operation::GaussianBlur,
-    /// and call gaussian_blur from operations.cpp, modifying the image directly.
+    /// and adds the gaussian_blur operation to the pipeline of operations.
     /// @throws std::invalid_argument if the cutoff is not an integer, or is outside [0, 255].
-    void call_gaussian_blur(
-        Image& image,
+    void add_gaussian_blur(
         char**& current_pos,
-        char** end
+        char** end,
+        std::vector<PipelineOperation>& operations
     ) {
         if(current_pos + 2 >= end) {
             throw std::invalid_argument("\"--gaussian-blur\" requires a supplied radius and sigma argument");
@@ -166,13 +168,13 @@ Notes:
             throw std::invalid_argument("Sigma must be supplied as a decimal value");
         }
 
-        image = gaussian_blur(image, radius, sigma);
+        operations.push_back(PipelineOperation{GaussianBlurOperation{radius, sigma}});
     }
 
 
-    /// Call the sobel operation and reassign the local image.
-    void call_sobel(Image& image) {
-        image = sobel(image); // convert to sobel image
+    /// Adds the sobel operation to the pipeline of operations.
+    void add_sobel(std::vector<PipelineOperation>& operations) {
+        operations.push_back(PipelineOperation{SobelOperation{}});
     }
 }
 
@@ -212,6 +214,7 @@ int main(int argc, char* argv[]) {
                 const std::string output_path{argv[2]};
                 Image image{load_image(input_path)};
 
+                // used for debugging
                 std::cout << ("Filepath: " + input_path + '\n')
                         << "Width: " << image.width << '\n'
                         << "Height: " << image.height << '\n'
@@ -229,6 +232,8 @@ int main(int argc, char* argv[]) {
                 const std::string input_path{argv[1]};
                 const std::string output_path{argv[2]};
 
+                // stores operations to be processed
+                std::vector<PipelineOperation> operations{};
                 Image image {load_image(input_path)};
 
                 // Start from fourth positional argument
@@ -244,31 +249,31 @@ int main(int argc, char* argv[]) {
                     
                         // Parses 1 positional argument
                         case Operation::Threshold: {
-                            call_threshold(image, current_pos, end);                            
+                            add_threshold(current_pos, end, operations);                            
                             break;
                         }
 
                         // Parses 0 positional arguments
                         case Operation::Grayscale: {
-                            call_grayscale(image);
+                            add_grayscale(operations);
                             break;
                         }
 
                         // Parses 0 positional arguments
                         case Operation::BoxBlur: {
-                            call_box_blur(image);
+                            add_box_blur(operations);
                             break;
                         }
 
                         // Parses 2 positional arguments
                         case Operation::GaussianBlur: {
-                            call_gaussian_blur(image, current_pos, end);
+                            add_gaussian_blur(current_pos, end, operations);
                             break;
                         }
 
                         // Parses 0 positional argument
                         case Operation::Sobel: {
-                            call_sobel(image);
+                            add_sobel(operations);
                             break;
                         }
                     }
@@ -276,7 +281,8 @@ int main(int argc, char* argv[]) {
                     // Move ptr to next char* in argv[]
                     ++current_pos;
                 }
-                    
+                
+                image = apply_pipeline(image, operations);
                 save_png(image, output_path);
                 std::cout << ("Saved to " + output_path + ".\n");
                 break;
