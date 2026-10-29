@@ -1,4 +1,5 @@
 #include "media/operations.hpp"
+#include "media/image.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -8,337 +9,356 @@
 #include <utility>
 #include <vector>
 
-#include "media/image.hpp"
 
 namespace {
 
-// sobel kernels/convolution matrices
-constexpr int sobel_x[3][3]{{-1, 0, 1}, {-2, 0, 2}, {-1, 0, 1}};
+    // sobel kernels/convolution matrices
+    constexpr int sobel_x[3][3] {
+        {-1,  0,  1},
+        {-2,  0,  2},
+        {-1,  0,  1}
+    };
 
-constexpr int sobel_y[3][3]{{-1, -2, -1}, {0, 0, 0}, {1, 2, 1}};
+    constexpr int sobel_y[3][3] {
+        {-1, -2, -1},
+        { 0,  0,  0},
+        { 1,  2,  1}
+    };
 
-/// Calulates uniform average of pixel brightness in a 3x3 neighborhood sample.
-/// Replicates nearest neighbor for out of bounds indices.
-/// @returns a uniform average of the 3x3 neighborhood sample.
-std::uint8_t calculate_average(const Image& image, const std::size_t index) {
-  std::size_t w{image.width};
-  std::size_t h{image.height};
-  std::size_t x{index % w};
-  std::size_t y{index / w};
 
-  std::size_t top_y{y >= 1 ? y - 1 : y};
-  std::size_t bottom_y{y + 1 < h ? y + 1 : y};
-  int sum{};
+    /// Calulates uniform average of pixel brightness in a 3x3 neighborhood sample.
+    /// Replicates nearest neighbor for out of bounds indices. 
+    /// @returns a uniform average of the 3x3 neighborhood sample.
+    std::uint8_t calculate_average(const Image& image, const std::size_t index) {
+        std::size_t w{image.width};
+        std::size_t h{image.height};
+        std::size_t x{index % w};
+        std::size_t y{index / w};
 
-  // evaluate per column
-  for (int offset{-1}; offset <= 1; ++offset) {
-    const std::size_t candidate_x{x + offset};
-    const std::size_t sample_x{
-        // prevent integer underflow by checking bounds first
-        offset < 0 && x < static_cast<std::size_t>(-offset) ? 0
-        : candidate_x >= w                                  ? w - 1
-                                                            : candidate_x};
+        std::size_t top_y{y >= 1 ? y - 1 : y};
+        std::size_t bottom_y{y + 1 < h ? y + 1 : y};
+        int sum{};
 
-    std::size_t top_index{top_y * w + sample_x};
-    std::size_t mid_index{y * w + sample_x};
-    std::size_t bot_index{bottom_y * w + sample_x};
+        // evaluate per column
+        for(int offset{-1}; offset <= 1; ++offset) {
+            const std::size_t candidate_x{x + offset};
+            const std::size_t sample_x{ 
+                // prevent integer underflow by checking bounds first
+                offset < 0 && x < static_cast<std::size_t>(-offset)
+                    ? 0
+                    : candidate_x >= w
+                        ? w - 1 
+                        : candidate_x
+            };
 
-    sum += image.pixels.at(top_index);
-    sum += image.pixels.at(mid_index);
-    sum += image.pixels.at(bot_index);
-  }
+            std::size_t top_index{top_y * w + sample_x};
+            std::size_t mid_index{y * w + sample_x};
+            std::size_t bot_index{bottom_y * w + sample_x};
 
-  return (sum + 4) / 9;
+            sum += image.pixels.at(top_index);
+            sum += image.pixels.at(mid_index);
+            sum += image.pixels.at(bot_index);
+        }
+
+        return (sum + 4) / 9;
+    }
+
+    /// Calculates a weighted average of pixel brightness using horizontal neighbors.
+    /// Replicates nearest neighbor for out of bounds indices.
+    /// Must be performed before the vertical pass. 
+    /// @returns a uniform average of the horizonal sample within the given radius.
+    double calculate_gaussian_average_horizontal(
+        const Image& image,
+        const std::size_t pixel_index,
+        const std::vector<double>& weights,
+        const int radius
+    ) {
+        // guard against malformed gaussian kernels
+        if(weights.size() != 2 * radius + 1) {
+            throw std::invalid_argument("Mismatch between size of weights vector and number of evaluated indices");
+        }
+
+
+        std::size_t w{image.width};
+        std::size_t h{image.height};
+        std::size_t x{pixel_index % w};
+        std::size_t y{pixel_index / w};
+        double weighted_avg{};
+        int index{};
+
+        // evaluate per row
+        for(int offset{-radius}; offset <= radius; ++offset) {
+            const std::size_t candidate_i{pixel_index + offset};
+            const std::size_t sample_i{
+                // prevent integer underflow by checking bounds first
+                offset < 0 && x < static_cast<std::size_t>(-offset)
+                    ? y * w
+                    : x + offset > w - 1
+                        ? y * w + w - 1 
+                        : candidate_i
+            };
+
+            weighted_avg += image.pixels.at(sample_i) * weights.at(index);
+            ++index;
+        }
+
+        return weighted_avg;
+    }
+
+    /// Calculates a weighted average of pixel brightness using vertical neighbors.
+    /// Replicates nearest neighbor for out of bounds indices.
+    /// Must be performed after the horizontal pass.
+    /// @returns a uniform average of the vertical sample within the given radius.
+    std::uint8_t calculate_gaussian_average_vertical(
+        const std::vector<double>& buffer,
+        const std::vector<double>& weights,
+        const int radius,
+        const std::size_t pixel_index,
+        const std::size_t w,
+        const std::size_t h
+    ) {
+        // guard against malformed gaussian kernels
+        if(weights.size() != 2 * radius + 1) {
+            throw std::invalid_argument("Mismatch between size of weights vector and number of evaluated indices");
+        }
+
+        std::size_t x{pixel_index % w};
+        std::size_t y{pixel_index / w};
+        double weighted_avg{};
+        int index{};
+
+        // evaluate per row
+        for(int row_offset{-radius}; row_offset <= radius; ++row_offset) {
+            const std::size_t candidate_i{(y + row_offset) * w + x};
+            const std::size_t sample_i{
+                // prevent integer underflow by checking bounds first
+                row_offset < 0 && y < static_cast<std::size_t>(-row_offset)
+                    ? x
+                    : y + row_offset >= h // valid values are [0, h-1], since y is zero-indexed
+                        ? (h - 1) * w + x
+                        : candidate_i
+            };
+
+            weighted_avg += buffer.at(sample_i) * weights.at(index);
+            ++index;
+        }
+
+        // round to nearest integer and clamp to 0-255
+        return static_cast<std::uint8_t>(std::clamp(weighted_avg + 0.5, 0.0, 255.0));
+    }
+
+    /// Performs the horizontal then vertical pass of computing
+    /// new pixel values from the gaussian kernel weights for gaussian blur.
+    /// @returns the new pixel vector of the image with the gaussian blur operation applied
+    std::vector<std::uint8_t> calculate_gaussian_pixels(
+        const Image& image,
+        const std::vector<double>& weights,
+        const int radius
+    ) {
+        std::vector<double> buffer(image.width * image.height);
+        std::vector<std::uint8_t> blurred_pixels(image.width * image.height); 
+
+        // horizontal pass
+        for(std::size_t i{}; i < image.pixels.size(); ++i) {
+            buffer.at(i) = calculate_gaussian_average_horizontal(image, i, weights, radius);
+        }
+
+        // vertical pass
+        for(std::size_t i{}; i < image.pixels.size(); ++i) {
+            blurred_pixels.at(i) = calculate_gaussian_average_vertical(buffer, weights, radius, i, image.width, image.height);
+        }
+
+        return blurred_pixels;
+    }
+
+    /// Calculates a gaussian kernel with a specified radius and sigma variance.
+    /// @throws std::invalid_argument exception if the radius is negative, or sigma is nonpositive or infinite.
+    /// @throws std::overflow_error if the radius overflows beyond integer capacity.
+    /// @returns a double vector containing the weights produced by a gaussian curve with the given parameters.
+    std::vector<double> gaussian_kernel(int radius, double sigma) {
+
+        if(radius < 0) {
+            throw std::invalid_argument("radius must be a nonnegative argument");
+        }
+
+        if(radius > (std::numeric_limits<int>::max() - 1) / 2) {
+            throw std::overflow_error("radius overflows beyond integer capacity");
+        }
+
+        if(!std::isfinite(sigma) || sigma <= 0.0) {
+            throw std::invalid_argument("sigma must be positive and finite");
+        }
+
+        double sum{};
+        int index{};
+        std::vector<double> weights(2 * radius + 1);
+
+        for(int x{-radius}; x <= radius; ++x) {
+            double scaled{static_cast<double>(x) / sigma};
+            double weight{std::exp(-0.5 * scaled * scaled)};
+            weights.at(index) = weight;
+            sum += weight;
+            ++index;
+        }
+
+        // normalize weights
+        for(int i{}; i < weights.size(); ++i) {
+            weights.at(i) /= sum;
+        }
+
+        return weights;
+    }
+
+    /// Calculates the brightness changes around one pixel.
+    /// @returns components of the intensity gradient
+    std::pair<int, int> calculate_sobel_values(const Image& image, const std::size_t index) {
+        
+        std::size_t w{image.width};
+        std::size_t h{image.height};
+        std::size_t x{index % w};
+        std::size_t y{index / w};
+
+        std::size_t top_y{y >= 1 ? y - 1 : y};
+        std::size_t bottom_y{y + 1 < h ? y + 1 : y};
+        int gx{}, gy{};
+
+        // evaluate per column
+        for(int offset{-1}; offset <= 1; ++offset) {
+            const std::size_t candidate_x{x + offset};
+            const std::size_t sample_x{ 
+                // prevent integer underflow by checking bounds first
+                offset < 0 && x < static_cast<std::size_t>(-offset)
+                    ? 0
+                    : candidate_x >= w
+                        ? w - 1 
+                        : candidate_x
+            };
+
+            std::size_t top_index{top_y * w + sample_x};
+            std::size_t mid_index{y * w + sample_x};
+            std::size_t bot_index{bottom_y * w + sample_x};
+
+            gx += sobel_x[0][offset+1] * image.pixels.at(top_index);
+            gx += sobel_x[1][offset+1] * image.pixels.at(mid_index);
+            gx += sobel_x[2][offset+1] * image.pixels.at(bot_index);
+
+            gy += sobel_y[0][offset+1] * image.pixels.at(top_index);
+            gy += sobel_y[1][offset+1] * image.pixels.at(mid_index);
+            gy += sobel_y[2][offset+1] * image.pixels.at(bot_index);
+        }
+
+        return {gx, gy};
+    }
 }
 
-/// Calculates a weighted average of pixel brightness using horizontal
-/// neighbors. Replicates nearest neighbor for out of bounds indices. Must be
-/// performed before the vertical pass.
-/// @returns a uniform average of the horizonal sample within the given radius.
-double calculate_gaussian_average_horizontal(const Image& image,
-                                             const std::size_t pixel_index,
-                                             const std::vector<double>& weights,
-                                             const int radius) {
-  // guard against malformed gaussian kernels
-  if (weights.size() != 2 * radius + 1) {
-    throw std::invalid_argument(
-        "Mismatch between size of weights vector and number of evaluated "
-        "indices");
-  }
-
-  std::size_t w{image.width};
-  std::size_t h{image.height};
-  std::size_t x{pixel_index % w};
-  std::size_t y{pixel_index / w};
-  double weighted_avg{};
-  int index{};
-
-  // evaluate per row
-  for (int offset{-radius}; offset <= radius; ++offset) {
-    const std::size_t candidate_i{pixel_index + offset};
-    const std::size_t sample_i{
-        // prevent integer underflow by checking bounds first
-        offset < 0 && x < static_cast<std::size_t>(-offset) ? y * w
-        : x + offset > w - 1                                ? y * w + w - 1
-                                                            : candidate_i};
-
-    weighted_avg += image.pixels.at(sample_i) * weights.at(index);
-    ++index;
-  }
-
-  return weighted_avg;
-}
-
-/// Calculates a weighted average of pixel brightness using vertical neighbors.
-/// Replicates nearest neighbor for out of bounds indices.
-/// Must be performed after the horizontal pass.
-/// @returns a uniform average of the vertical sample within the given radius.
-std::uint8_t calculate_gaussian_average_vertical(
-    const std::vector<double>& buffer, const std::vector<double>& weights,
-    const int radius, const std::size_t pixel_index, const std::size_t w,
-    const std::size_t h) {
-  // guard against malformed gaussian kernels
-  if (weights.size() != 2 * radius + 1) {
-    throw std::invalid_argument(
-        "Mismatch between size of weights vector and number of evaluated "
-        "indices");
-  }
-
-  std::size_t x{pixel_index % w};
-  std::size_t y{pixel_index / w};
-  double weighted_avg{};
-  int index{};
-
-  // evaluate per row
-  for (int row_offset{-radius}; row_offset <= radius; ++row_offset) {
-    const std::size_t candidate_i{(y + row_offset) * w + x};
-    const std::size_t sample_i{
-        // prevent integer underflow by checking bounds first
-        row_offset < 0 && y < static_cast<std::size_t>(-row_offset) ? x
-        : y + row_offset >=
-                h  // valid values are [0, h-1], since y is zero-indexed
-            ? (h - 1) * w + x
-            : candidate_i};
-
-    weighted_avg += buffer.at(sample_i) * weights.at(index);
-    ++index;
-  }
-
-  // round to nearest integer and clamp to 0-255
-  return static_cast<std::uint8_t>(std::clamp(weighted_avg + 0.5, 0.0, 255.0));
-}
-
-/// Performs the horizontal then vertical pass of computing
-/// new pixel values from the gaussian kernel weights for gaussian blur.
-/// @returns the new pixel vector of the image with the gaussian blur operation
-/// applied
-std::vector<std::uint8_t> calculate_gaussian_pixels(
-    const Image& image, const std::vector<double>& weights, const int radius) {
-  std::vector<double> buffer(image.width * image.height);
-  std::vector<std::uint8_t> blurred_pixels(image.width * image.height);
-
-  // horizontal pass
-  for (std::size_t i{}; i < image.pixels.size(); ++i) {
-    buffer.at(i) =
-        calculate_gaussian_average_horizontal(image, i, weights, radius);
-  }
-
-  // vertical pass
-  for (std::size_t i{}; i < image.pixels.size(); ++i) {
-    blurred_pixels.at(i) = calculate_gaussian_average_vertical(
-        buffer, weights, radius, i, image.width, image.height);
-  }
-
-  return blurred_pixels;
-}
-
-/// Calculates a gaussian kernel with a specified radius and sigma variance.
-/// @throws std::invalid_argument exception if the radius is negative, or sigma
-/// is nonpositive or infinite.
-/// @throws std::overflow_error if the radius overflows beyond integer capacity.
-/// @returns a double vector containing the weights produced by a gaussian curve
-/// with the given parameters.
-std::vector<double> gaussian_kernel(int radius, double sigma) {
-  if (radius < 0) {
-    throw std::invalid_argument("radius must be a nonnegative argument");
-  }
-
-  if (radius > (std::numeric_limits<int>::max() - 1) / 2) {
-    throw std::overflow_error("radius overflows beyond integer capacity");
-  }
-
-  if (!std::isfinite(sigma) || sigma <= 0.0) {
-    throw std::invalid_argument("sigma must be positive and finite");
-  }
-
-  double sum{};
-  int index{};
-  std::vector<double> weights(2 * radius + 1);
-
-  for (int x{-radius}; x <= radius; ++x) {
-    double scaled{static_cast<double>(x) / sigma};
-    double weight{std::exp(-0.5 * scaled * scaled)};
-    weights.at(index) = weight;
-    sum += weight;
-    ++index;
-  }
-
-  // normalize weights
-  for (int i{}; i < weights.size(); ++i) {
-    weights.at(i) /= sum;
-  }
-
-  return weights;
-}
-
-/// Calculates the brightness changes around one pixel.
-/// @returns components of the intensity gradient
-std::pair<int, int> calculate_sobel_values(const Image& image,
-                                           const std::size_t index) {
-  std::size_t w{image.width};
-  std::size_t h{image.height};
-  std::size_t x{index % w};
-  std::size_t y{index / w};
-
-  std::size_t top_y{y >= 1 ? y - 1 : y};
-  std::size_t bottom_y{y + 1 < h ? y + 1 : y};
-  int gx{}, gy{};
-
-  // evaluate per column
-  for (int offset{-1}; offset <= 1; ++offset) {
-    const std::size_t candidate_x{x + offset};
-    const std::size_t sample_x{
-        // prevent integer underflow by checking bounds first
-        offset < 0 && x < static_cast<std::size_t>(-offset) ? 0
-        : candidate_x >= w                                  ? w - 1
-                                                            : candidate_x};
-
-    std::size_t top_index{top_y * w + sample_x};
-    std::size_t mid_index{y * w + sample_x};
-    std::size_t bot_index{bottom_y * w + sample_x};
-
-    gx += sobel_x[0][offset + 1] * image.pixels.at(top_index);
-    gx += sobel_x[1][offset + 1] * image.pixels.at(mid_index);
-    gx += sobel_x[2][offset + 1] * image.pixels.at(bot_index);
-
-    gy += sobel_y[0][offset + 1] * image.pixels.at(top_index);
-    gy += sobel_y[1][offset + 1] * image.pixels.at(mid_index);
-    gy += sobel_y[2][offset + 1] * image.pixels.at(bot_index);
-  }
-
-  return {gx, gy};
-}
-}  // namespace
 
 /// Converts a Gray8 image to black and white in place.
 /// @throws std::invalid_argument for invalid images or non-Gray8 formats.
 /// @throws std::overflow_error if image size calculations overflow.
 void threshold(Image& image, std::uint8_t cutoff) {
-  image.validate();
+    image.validate();
 
-  if (image.format != PixelFormat::Gray8) {
-    throw std::invalid_argument(
-        "Grayscale thresholding only supports grayscale images.");
-  }
+    if(image.format != PixelFormat::Gray8) {
+        throw std::invalid_argument("Grayscale thresholding only supports grayscale images.");
+    }
 
-  for (auto& pixel : image.pixels) {
-    pixel = (pixel < cutoff) ? 0 : 255;
-  }
+    for(auto& pixel : image.pixels) {
+        pixel = (pixel < cutoff) ? 0 : 255;
+    }
 }
 
 /// Converts an image to its grayscale representation.
-/// @throws std::invalid_argument exception if the input image is already in a
-/// grayscale format.
+/// @throws std::invalid_argument exception if the input image is already in a grayscale format.
 /// @returns a new image since the format and storage representation may change.
 Image to_grayscale(const Image& image) {
-  image.validate();
+    image.validate();
 
-  if (image.format == PixelFormat::Gray8) {
-    return image;
-  }
+    if(image.format == PixelFormat::Gray8) {
+        return image;
+    }
 
-  std::size_t pixel_index{0};
-  std::vector<std::uint8_t> grayscale_pixels(image.width * image.height);
-  Image output{image.width, image.height, PixelFormat::Gray8, grayscale_pixels};
+    std::size_t pixel_index{0}; 
+    std::vector<std::uint8_t> grayscale_pixels(image.width * image.height);
+    Image output{
+        image.width,
+        image.height,
+        PixelFormat::Gray8,
+        grayscale_pixels
+    };
 
-  for (std::size_t i{0}; i < image.pixels.size(); i += 3) {
-    const std::uint8_t r{image.pixels.at(i)};
-    const std::uint8_t g{image.pixels.at(i + 1)};
-    const std::uint8_t b{image.pixels.at(i + 2)};
+    for(std::size_t i{0}; i < image.pixels.size(); i += 3) {
+        const std::uint8_t r{image.pixels.at(i)};
+        const std::uint8_t g{image.pixels.at(i + 1)};
+        const std::uint8_t b{image.pixels.at(i + 2)};
 
-    // approximate brightness value calcualted by rgb values
-    const std::uint32_t luma{
-        static_cast<std::uint32_t>((299 * r + 587 * g + 114 * b + 500) / 1000)};
-    output.pixels.at(pixel_index) = luma;
-    ++pixel_index;
-  }
+        // approximate brightness value calcualted by rgb values
+        const std::uint32_t luma{static_cast<std::uint32_t>((299 * r + 587 * g + 114 * b + 500) / 1000)};
+        output.pixels.at(pixel_index) = luma;
+        ++pixel_index;
+    }
 
-  return output;
+    return output;
 }
 
 /// Performs a uniform blur using a 3x3 neighborhood sample average per pixel.
-/// @throws std::invalid_argument exception if the input image is not in a
-/// grayscale format.
-/// @returns an Image with a blur applied from a uniform average of the 3x3
-/// neighborhood sample per pixel.
+/// @throws std::invalid_argument exception if the input image is not in a grayscale format.
+/// @returns an Image with a blur applied from a uniform average of the 3x3 neighborhood sample per pixel.
 Image box_blur(const Image& image) {
-  image.validate();
+    image.validate();
+    
+    if(image.format != PixelFormat::Gray8) {
+        throw std::invalid_argument("Box blur only supports grayscale images.");
+    }
 
-  if (image.format != PixelFormat::Gray8) {
-    throw std::invalid_argument("Box blur only supports grayscale images.");
-  }
+    Image output{image};
 
-  Image output{image};
+    for(std::size_t i{0}; i < image.pixels.size(); i++) {
+        output.pixels.at(i) = calculate_average(image, i);
+    }
 
-  for (std::size_t i{0}; i < image.pixels.size(); i++) {
-    output.pixels.at(i) = calculate_average(image, i);
-  }
-
-  return output;
+    return output;
 }
 
+
 /// Performs a gaussian blur parameterized by a radius and sigma variance value.
-/// @throws std::invalid_argument exception if the input image is not in a
-/// grayscale format.
+/// @throws std::invalid_argument exception if the input image is not in a grayscale format.
 /// @returns the source image with the gaussian blur operation applied
 Image gaussian_blur(const Image& image, int radius, double sigma) {
-  image.validate();
+    image.validate();
+    
+    if(image.format != PixelFormat::Gray8) {
+        throw std::invalid_argument("Gaussian blur only supports grayscale images.");
+    }
 
-  if (image.format != PixelFormat::Gray8) {
-    throw std::invalid_argument(
-        "Gaussian blur only supports grayscale images.");
-  }
+    Image output{image};
 
-  Image output{image};
+    std::vector<double> weights(gaussian_kernel(radius, sigma));
+    std::vector<double> buffer(image.width * image.height);
+    
+    output.pixels = calculate_gaussian_pixels(image, weights, radius);
 
-  std::vector<double> weights(gaussian_kernel(radius, sigma));
-  std::vector<double> buffer(image.width * image.height);
-
-  output.pixels = calculate_gaussian_pixels(image, weights, radius);
-
-  return output;
+    return output;
 }
 
 /// Performs a sobel edge detection on the input image.
-/// @throws std::invalid_argument exception if the input image is not in a
-/// grayscale format.
+/// @throws std::invalid_argument exception if the input image is not in a grayscale format.
 /// @returns the source image with sobel edge detection applied
 Image sobel(const Image& image) {
-  image.validate();
+    image.validate();
 
-  if (image.format != PixelFormat::Gray8) {
-    throw std::invalid_argument(
-        "Sobel edge detection only supports grayscale images.");
-  }
+    if(image.format != PixelFormat::Gray8) {
+        throw std::invalid_argument("Sobel edge detection only supports grayscale images.");
+    }
 
-  Image output = image;
+    Image output = image;
 
-  for (std::size_t i{0}; i < image.pixels.size(); ++i) {
-    auto [gx, gy] = calculate_sobel_values(image, i);
-    double magnitude{std::hypot(gx, gy)};
-    output.pixels.at(i) = static_cast<std::uint8_t>(
-        std::clamp(std::round(magnitude), 0.0, 255.0));
-  }
+    for(std::size_t i{0}; i < image.pixels.size(); ++i) {
+        auto [gx, gy] = calculate_sobel_values(image, i);
+        double magnitude{std::hypot(gx, gy)};
+        output.pixels.at(i) = static_cast<std::uint8_t>(
+            std::clamp(std::round(magnitude), 0.0, 255.0)
+        );
+    }
 
-  return output;
+    return output;
 }

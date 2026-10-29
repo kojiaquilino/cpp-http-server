@@ -1,3 +1,8 @@
+#include "media/image.hpp"
+#include "media/image_io.hpp"
+#include "media/operations.hpp"
+#include "media/pipeline.hpp"
+
 #include <algorithm>
 #include <array>
 #include <exception>
@@ -6,14 +11,11 @@
 #include <string_view>
 #include <vector>
 
-#include "media/image.hpp"
-#include "media/image_io.hpp"
-#include "media/operations.hpp"
-#include "media/pipeline.hpp"
+
 
 // Helper vars/functions for CLI parsing
 namespace {
-constexpr std::string_view usage = R"(
+    constexpr std::string_view usage = R"(
 Usage:
     media_demo <input-image> <output.png> [operations...]
     media_demo --help
@@ -74,97 +76,107 @@ Notes:
     - The output directory must already exist.
 )";
 
-enum class Operation { Threshold, Grayscale, BoxBlur, GaussianBlur, Sobel };
+    enum class Operation {
+        Threshold, 
+        Grayscale,
+        BoxBlur,
+        GaussianBlur,
+        Sobel
+    };
 
-// Convert cli argument to their corresponding operations.
-// Throws an error if the argument is an invalid operation.
+    // Convert cli argument to their corresponding operations.
+    // Throws an error if the argument is an invalid operation.
 
-/// Convert a CLI argument to their corresponding operations.
-/// @throws std::invalid_argument if the argument is an invalid operation.
-Operation parse_operation(std::string_view operation) {
-  // Enumerate conversion to corresponding enum values
-  if (operation == "--threshold") return Operation::Threshold;
-  if (operation == "--grayscale") return Operation::Grayscale;
-  if (operation == "--box-blur") return Operation::BoxBlur;
-  if (operation == "--gaussian-blur") return Operation::GaussianBlur;
-  if (operation == "--sobel") return Operation::Sobel;
+    /// Convert a CLI argument to their corresponding operations.
+    /// @throws std::invalid_argument if the argument is an invalid operation.
+    Operation parse_operation(std::string_view operation) {
+        // Enumerate conversion to corresponding enum values
+        if(operation == "--threshold") return Operation::Threshold;
+        if(operation == "--grayscale") return Operation::Grayscale;
+        if(operation == "--box-blur") return Operation::BoxBlur;
+        if(operation == "--gaussian-blur") return Operation::GaussianBlur;
+        if(operation == "--sobel") return Operation::Sobel;
 
-  // Throw error if provided an invalid operation
-  throw std::invalid_argument("Unsupported argument: " +
-                              static_cast<std::string>(operation));
+        // Throw error if provided an invalid operation
+        throw std::invalid_argument(
+            "Unsupported argument: " + static_cast<std::string>(operation)
+        );
+    }
+
+    //// Operation-specific wrapper functions ////
+
+    /// Parse the cutoff positional argument for Operation::Threshold,
+    /// and adds the threshold operation to the pipeline of operations.
+    /// @throws std::invalid_argument if the cutoff is not an integer, or is outside [0, 255].
+    void add_threshold(
+        char**& current_pos,
+        char** end,
+        std::vector<PipelineOperation>& operations
+    ) {
+        if(current_pos + 1 >= end) {
+            throw std::invalid_argument("\"--threshold\" requires a grayscale cutoff parameter from 0-255");
+        }
+
+        std::string text{*++current_pos};
+        std::size_t parsed{0};
+        int value{std::stoi(text, &parsed)};
+
+        // Ensure that the whole string was
+        // consumed when parsing the int
+        if(parsed != text.size() || value < 0 || value > 255) {
+            throw std::invalid_argument("Cutoff must be an integer from 0-255");
+        }
+
+        auto cutoff = static_cast<std::uint8_t>(value);
+        operations.push_back(PipelineOperation{ThresholdOperation{cutoff}});
+    }
+
+    /// Adds the to_grayscale operation to the pipeline of operations.
+    void add_grayscale(std::vector<PipelineOperation>& operations) {
+        operations.push_back(PipelineOperation{GrayscaleOperation{}});
+    }
+ 
+    /// Adds the box_blur operation to the pipeline of operations.
+    void add_box_blur(std::vector<PipelineOperation>& operations) {
+        operations.push_back(PipelineOperation{BoxBlurOperation{}});
+    }
+
+    /// Parse sigma and radius positional arguments for Operation::GaussianBlur,
+    /// and adds the gaussian_blur operation to the pipeline of operations.
+    /// @throws std::invalid_argument if the cutoff is not an integer, or is outside [0, 255].
+    void add_gaussian_blur(
+        char**& current_pos,
+        char** end,
+        std::vector<PipelineOperation>& operations
+    ) {
+        if(current_pos + 2 >= end) {
+            throw std::invalid_argument("\"--gaussian-blur\" requires a supplied radius and sigma argument");
+        }
+
+        std::string radius_text{*++current_pos};
+        std::string sigma_text{*++current_pos};
+        std::size_t parsed_radius{0};
+        std::size_t parsed_sigma{0};
+        int radius{std::stoi(radius_text, &parsed_radius)};
+        double sigma{std::stod(sigma_text, &parsed_sigma)};
+
+        if(parsed_radius != radius_text.size()) {
+            throw std::invalid_argument("Radius must be a nonnegative integer");
+        }
+
+        if(parsed_sigma != sigma_text.size()) {
+            throw std::invalid_argument("Sigma must be supplied as a decimal value");
+        }
+
+        operations.push_back(PipelineOperation{GaussianBlurOperation{radius, sigma}});
+    }
+
+
+    /// Adds the sobel operation to the pipeline of operations.
+    void add_sobel(std::vector<PipelineOperation>& operations) {
+        operations.push_back(PipelineOperation{SobelOperation{}});
+    }
 }
-
-//// Operation-specific wrapper functions ////
-
-/// Parse the cutoff positional argument for Operation::Threshold,
-/// and adds the threshold operation to the pipeline of operations.
-/// @throws std::invalid_argument if the cutoff is not an integer, or is outside
-/// [0, 255].
-void add_threshold(char**& current_pos, char** end,
-                   std::vector<PipelineOperation>& operations) {
-  if (current_pos + 1 >= end) {
-    throw std::invalid_argument(
-        "\"--threshold\" requires a grayscale cutoff parameter from 0-255");
-  }
-
-  std::string text{*++current_pos};
-  std::size_t parsed{0};
-  int value{std::stoi(text, &parsed)};
-
-  // Ensure that the whole string was
-  // consumed when parsing the int
-  if (parsed != text.size() || value < 0 || value > 255) {
-    throw std::invalid_argument("Cutoff must be an integer from 0-255");
-  }
-
-  auto cutoff = static_cast<std::uint8_t>(value);
-  operations.push_back(PipelineOperation{ThresholdOperation{cutoff}});
-}
-
-/// Adds the to_grayscale operation to the pipeline of operations.
-void add_grayscale(std::vector<PipelineOperation>& operations) {
-  operations.push_back(PipelineOperation{GrayscaleOperation{}});
-}
-
-/// Adds the box_blur operation to the pipeline of operations.
-void add_box_blur(std::vector<PipelineOperation>& operations) {
-  operations.push_back(PipelineOperation{BoxBlurOperation{}});
-}
-
-/// Parse sigma and radius positional arguments for Operation::GaussianBlur,
-/// and adds the gaussian_blur operation to the pipeline of operations.
-/// @throws std::invalid_argument if the cutoff is not an integer, or is outside
-/// [0, 255].
-void add_gaussian_blur(char**& current_pos, char** end,
-                       std::vector<PipelineOperation>& operations) {
-  if (current_pos + 2 >= end) {
-    throw std::invalid_argument(
-        "\"--gaussian-blur\" requires a supplied radius and sigma argument");
-  }
-
-  std::string radius_text{*++current_pos};
-  std::string sigma_text{*++current_pos};
-  std::size_t parsed_radius{0};
-  std::size_t parsed_sigma{0};
-  int radius{std::stoi(radius_text, &parsed_radius)};
-  double sigma{std::stod(sigma_text, &parsed_sigma)};
-
-  if (parsed_radius != radius_text.size()) {
-    throw std::invalid_argument("Radius must be a nonnegative integer");
-  }
-
-  if (parsed_sigma != sigma_text.size()) {
-    throw std::invalid_argument("Sigma must be supplied as a decimal value");
-  }
-
-  operations.push_back(PipelineOperation{GaussianBlurOperation{radius, sigma}});
-}
-
-/// Adds the sobel operation to the pipeline of operations.
-void add_sobel(std::vector<PipelineOperation>& operations) {
-  operations.push_back(PipelineOperation{SobelOperation{}});
-}
-}  // namespace
 
 /**
  * argv[0]: executable name
@@ -172,113 +184,113 @@ void add_sobel(std::vector<PipelineOperation>& operations) {
  * argv[2]: output filepath
  */
 int main(int argc, char* argv[]) {
-  try {
-    switch (argc) {
-      // Malformed arguments -> return error code
-      case 0:
-      case 1: {
-        std::cerr << usage << '\n';
+    try {
+        switch(argc) {
+
+            // Malformed arguments -> return error code
+            case 0:
+            case 1: {
+                std::cerr << usage << '\n';
+                return 1;
+            }
+
+            // media_demo (--help || -h)
+            case 2: {
+                const std::string argument{argv[1]};
+
+                if(argument == "-h" || argument == "--help") {
+                    std::cout << usage << '\n';
+                    return 0;
+                } else {
+                    std::cerr << usage << '\n';
+                    return 1;
+                }
+                break;
+            }
+
+            // media_demo input_filepath output_filepath
+            case 3: {
+                const std::string input_path{argv[1]};
+                const std::string output_path{argv[2]};
+                Image image{load_image(input_path)};
+
+                // used for debugging
+                std::cout << ("Filepath: " + input_path + '\n')
+                        << "Width: " << image.width << '\n'
+                        << "Height: " << image.height << '\n'
+                        << "Number of bytes: " << image.pixels.size() << '\n'
+                        << "Format: " << (image.format == PixelFormat::RGB8 ? "RGB8" : "Gray8") << '\n';
+
+                save_png(image, output_path);
+                std::cout << ("Saved to " + output_path + ".\n");
+                break;
+            }
+
+            // 1+ operations invoked, perform them sequentially,
+            // then save to output_filepath
+            default: {
+                const std::string input_path{argv[1]};
+                const std::string output_path{argv[2]};
+
+                // stores operations to be processed
+                std::vector<PipelineOperation> operations{};
+                Image image {load_image(input_path)};
+
+                // Start from fourth positional argument
+                // Skip program name (0), and input/output (1/2) filepaths
+                char** current_pos = argv + 3;
+                char** end = argv + argc;
+
+                while(current_pos < end) {
+                    std::string_view argument{*current_pos};
+                    Operation operation{parse_operation(argument)};
+
+                    switch(operation) {
+                    
+                        // Parses 1 positional argument
+                        case Operation::Threshold: {
+                            add_threshold(current_pos, end, operations);                            
+                            break;
+                        }
+
+                        // Parses 0 positional arguments
+                        case Operation::Grayscale: {
+                            add_grayscale(operations);
+                            break;
+                        }
+
+                        // Parses 0 positional arguments
+                        case Operation::BoxBlur: {
+                            add_box_blur(operations);
+                            break;
+                        }
+
+                        // Parses 2 positional arguments
+                        case Operation::GaussianBlur: {
+                            add_gaussian_blur(current_pos, end, operations);
+                            break;
+                        }
+
+                        // Parses 0 positional argument
+                        case Operation::Sobel: {
+                            add_sobel(operations);
+                            break;
+                        }
+                    }
+
+                    // Move ptr to next char* in argv[]
+                    ++current_pos;
+                }
+                
+                image = apply_pipeline(image, operations);
+                save_png(image, output_path);
+                std::cout << ("Saved to " + output_path + ".\n");
+                break;
+            }
+        }
+    } catch (const std::exception& error) {
+        std::cout << usage << "\n\n";
+        std::cerr << ("ERROR: " + static_cast<std::string>(error.what())) << "\n\n";
         return 1;
-      }
-
-      // media_demo (--help || -h)
-      case 2: {
-        const std::string argument{argv[1]};
-
-        if (argument == "-h" || argument == "--help") {
-          std::cout << usage << '\n';
-          return 0;
-        } else {
-          std::cerr << usage << '\n';
-          return 1;
-        }
-        break;
-      }
-
-      // media_demo input_filepath output_filepath
-      case 3: {
-        const std::string input_path{argv[1]};
-        const std::string output_path{argv[2]};
-        Image image{load_image(input_path)};
-
-        // used for debugging
-        std::cout << ("Filepath: " + input_path + '\n')
-                  << "Width: " << image.width << '\n'
-                  << "Height: " << image.height << '\n'
-                  << "Number of bytes: " << image.pixels.size() << '\n'
-                  << "Format: "
-                  << (image.format == PixelFormat::RGB8 ? "RGB8" : "Gray8")
-                  << '\n';
-
-        save_png(image, output_path);
-        std::cout << ("Saved to " + output_path + ".\n");
-        break;
-      }
-
-      // 1+ operations invoked, perform them sequentially,
-      // then save to output_filepath
-      default: {
-        const std::string input_path{argv[1]};
-        const std::string output_path{argv[2]};
-
-        // stores operations to be processed
-        std::vector<PipelineOperation> operations{};
-        Image image{load_image(input_path)};
-
-        // Start from fourth positional argument
-        // Skip program name (0), and input/output (1/2) filepaths
-        char** current_pos = argv + 3;
-        char** end = argv + argc;
-
-        while (current_pos < end) {
-          std::string_view argument{*current_pos};
-          Operation operation{parse_operation(argument)};
-
-          switch (operation) {
-            // Parses 1 positional argument
-            case Operation::Threshold: {
-              add_threshold(current_pos, end, operations);
-              break;
-            }
-
-            // Parses 0 positional arguments
-            case Operation::Grayscale: {
-              add_grayscale(operations);
-              break;
-            }
-
-            // Parses 0 positional arguments
-            case Operation::BoxBlur: {
-              add_box_blur(operations);
-              break;
-            }
-
-            // Parses 2 positional arguments
-            case Operation::GaussianBlur: {
-              add_gaussian_blur(current_pos, end, operations);
-              break;
-            }
-
-            // Parses 0 positional argument
-            case Operation::Sobel: {
-              add_sobel(operations);
-              break;
-            }
-          }
-
-          // Move ptr to next char* in argv[]
-          ++current_pos;
-        }
-
-        image = apply_pipeline(image, operations);
-        save_png(image, output_path);
-        std::cout << ("Saved to " + output_path + ".\n");
-        break;
-      }
     }
-  } catch (const std::exception& error) {
-    std::cout << usage << "\n\n";
-    std::cerr << ("ERROR: " + static_cast<std::string>(error.what())) << "\n\n";
-    return 1;
-  }
 }
