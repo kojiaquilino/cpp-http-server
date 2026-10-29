@@ -16,3 +16,20 @@ target_include_directories(media_io PRIVATE third_party/stb)
 add_executable(media_demo src/main.cpp)
 target_link_libraries(media_io PUBLIC media_core) # Add libraries to linker
 target_link_libraries(media_demo PRIVATE media_io)
+
+# Add project library server_net
+add_library(server_net
+    server/net/winsock_runtime.cpp
+    server/net/socket.cpp
+)
+
+target_include_directories(server_net PUBLIC server)
+target_compile_features(server_net PUBLIC cxx_std_20)
+
+if(WIN32)
+    target_link_libraries(server_net PRIVATE Ws2_32)
+endif()
+
+# Declare executable media_server
+add_executable(media_server server/main.cpp)
+target_link_libraries(media_server PRIVATE server_net)
