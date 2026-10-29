@@ -1,8 +1,8 @@
 #pragma once
 
-#include "media/image.hpp"
-
 #include <string>
+
+#include "media/image.hpp"
 
 // Load an image from a specified filepath.
 Image load_image(const std::string& path);
