@@ -1,13 +1,15 @@
 #include "socket.hpp"
 
-#include <winsock.h>
+#include <winsock2.h>
 #include <utility>
 
 Socket::Socket(SOCKET handle) noexcept
     : handle_{handle} {};
     
 Socket::~Socket() noexcept {
-    closesocket(handle_);
+    if(valid()) {
+        closesocket(handle_);
+    }
 }
 
 SOCKET Socket::native_handle() const noexcept {
@@ -23,7 +25,16 @@ Socket::Socket(Socket&& other) noexcept {
 }
 
 Socket& Socket::operator=(Socket&& other) noexcept {
-    handle_ = std::exchange(other.handle_, INVALID_SOCKET);
+
+    // Prevent self-moves
+    if(this != &other) {
+        if(valid()) {
+            closesocket(handle_); // Close existing socket if still open
+        }
+
+        // Move other handle to current socket object, and invalidate other handle
+        handle_ = std::exchange(other.handle_, INVALID_SOCKET);
+    }
     return *this;
 }
 

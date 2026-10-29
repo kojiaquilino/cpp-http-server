@@ -1,7 +1,7 @@
 #include "net/socket.hpp"
 #include "net/winsock_runtime.hpp"
 
-#include <winsock.h>
+#include <winsock2.h>
 #include <iostream>
 #include <string>
 
