@@ -7,6 +7,7 @@ int main() {
         std::cout << "Winsock initialized.\n";
     } catch (const std::exception& error) {
         std::cerr << "Encountered an error: " << error.what() << '\n';
+        return 1;
     }
 
     return 0;
