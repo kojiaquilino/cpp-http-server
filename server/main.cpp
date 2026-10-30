@@ -11,7 +11,7 @@ namespace{
     constexpr DWORD receive_timeout_ms{10000};
     constexpr int receive_buffer_size{4096};
 
-    // Checks for errors involving INVALID_SOCKET
+    // Checks for errors involving SOCKET_ERROR
     void check_socket_error(int result, std::string method) {
         if(result == SOCKET_ERROR) {
             const int error{WSAGetLastError()};
@@ -24,6 +24,8 @@ int main() {
     try {
         WinsockRuntime runtime; // Start windows socket library
         std::cout << "Winsock initialized.\n";
+
+        //// CREATE LISTENER SOCKET ////
 
         SOCKET raw_listener_handle{::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)};
 
@@ -47,6 +49,9 @@ int main() {
             throw std::runtime_error("InetPtonA() failed to convert to binary IPv4 format, returning code: " + std::to_string(converted_result));
         }
 
+
+        //// BIND SOCKET TO ADDRESS ////
+
         // Bind socket to local ip address and port
         int bind_result{
             ::bind(
@@ -61,6 +66,10 @@ int main() {
             throw std::runtime_error("bind() failed with error code: " + std::to_string(error));
         }
 
+
+        //// START LISTENER SOCKET ON SPECIFIED ADDRESS AND PORT ////
+
+
         // Start listening on address and port via listener socket
         check_socket_error(
             ::listen(listener.native_handle(), SOMAXCONN), // mark bound socket as a listening socket with max-length pending-connection queue
@@ -69,6 +78,9 @@ int main() {
 
         std::cout << "Listening on 127.0.0.1:8080.\n";
         
+
+        //// RECEIVE AND ACCEPT INCOMING CONNECTIONS ////
+
         while(true) {
             
             // Blocks while awaiting incoming connections
@@ -76,7 +88,12 @@ int main() {
                 ::accept(listener.native_handle(), nullptr, nullptr)
             };
 
-            check_socket_error(accepted_handle, "accept");
+            if(accepted_handle == INVALID_SOCKET) {
+                const int error{WSAGetLastError()};
+                throw std::runtime_error(
+                    "accept() failed with error code: " + std::to_string(error)
+                );
+            }
 
             // Wrap accepted handle
             Socket connection{accepted_handle};
@@ -91,7 +108,8 @@ int main() {
                 "setsockopt"
             );
 
-            char buffer[receive_buffer_size]{}; // local buffer to store received data
+            // local buffer to store received data
+            char buffer[receive_buffer_size]{};
 
             while(true) {
                 int received {
@@ -101,6 +119,7 @@ int main() {
                 // Connection received "received" bytes via socket
                 if(received > 0) {
                     std::cout.write(buffer, received);
+                    std::cout.flush();
                 } 
                 // Connection closed by client
                 else if(received == 0) {
@@ -109,7 +128,8 @@ int main() {
                 // SOCKET_ERROR: report error
                 else {
                     const int error{WSAGetLastError()};
-                    throw std::runtime_error("recv() failed with error code: " + std::to_string(error));
+                    std::cerr << "recv() failed with error code: " + std::to_string(error) << '\n';
+                    break;
                 }
             }
         }
