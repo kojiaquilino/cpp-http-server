@@ -7,6 +7,19 @@
 #include <winsock2.h>
 #include <ws2tcpip.h> // Address conversion functions
 
+namespace{
+    constexpr DWORD receive_timeout_ms{10000};
+    constexpr int receive_buffer_size{4096};
+
+    // Checks for errors involving INVALID_SOCKET
+    void check_socket_error(int result, std::string method) {
+        if(result == SOCKET_ERROR) {
+            const int error{WSAGetLastError()};
+            throw std::runtime_error(method + "() failed with error code: " + std::to_string(error));
+        }
+    }
+}
+
 int main() {
     try {
         WinsockRuntime runtime; // Start windows socket library
@@ -31,7 +44,7 @@ int main() {
 
         // Check for address conversion success
         if(converted_result != 1) {
-            throw std::runtime_error("InetPtonA() failed to convert to binary IPv4 format, returning code: " + converted_result);
+            throw std::runtime_error("InetPtonA() failed to convert to binary IPv4 format, returning code: " + std::to_string(converted_result));
         }
 
         // Bind socket to local ip address and port
@@ -49,23 +62,59 @@ int main() {
         }
 
         // Start listening on address and port via listener socket
-        int listen_result{
-            ::listen(listener.native_handle(), SOMAXCONN) // mark bound socket as a listening socket with max-length pending-connection queue
-        };
+        check_socket_error(
+            ::listen(listener.native_handle(), SOMAXCONN), // mark bound socket as a listening socket with max-length pending-connection queue
+            "listen"
+        );
 
-        if(listen_result == SOCKET_ERROR) {
-            const int error{WSAGetLastError()};
-            throw std::runtime_error("listen() failed with error code: " + std::to_string(error));
+        std::cout << "Listening on 127.0.0.1:8080.\n";
+        
+        while(true) {
+            
+            // Blocks while awaiting incoming connections
+            SOCKET accepted_handle {
+                ::accept(listener.native_handle(), nullptr, nullptr)
+            };
+
+            check_socket_error(accepted_handle, "accept");
+
+            // Wrap accepted handle
+            Socket connection{accepted_handle};
+            check_socket_error(
+                ::setsockopt(
+                    accepted_handle,                                    // Socket handle to modify
+                    SOL_SOCKET,                                         // General socket options
+                    SO_RCVTIMEO,                                        // Receive timeout option
+                    reinterpret_cast<const char*>(&receive_timeout_ms), // Address of the value
+                    static_cast<int>(sizeof(receive_timeout_ms))        // Value's size in bytes
+                ),
+                "setsockopt"
+            );
+
+            char buffer[receive_buffer_size]{}; // local buffer to store received data
+
+            while(true) {
+                int received {
+                    ::recv(connection.native_handle(), buffer, sizeof(buffer), 0)
+                };
+
+                // Connection received "received" bytes via socket
+                if(received > 0) {
+                    std::cout.write(buffer, received);
+                } 
+                // Connection closed by client
+                else if(received == 0) {
+                    break;
+                }
+                // SOCKET_ERROR: report error
+                else {
+                    const int error{WSAGetLastError()};
+                    throw std::runtime_error("recv() failed with error code: " + std::to_string(error));
+                }
+            }
         }
 
-        std::cout << "Listening on 127.0.0.1:8080. Press Enter to stop.\n";
-        std::cin.get(); // suspend program until further input
-
-
         std::cout << "Cleaning up...\n";
-
-
-      
 
     } catch (const std::exception& error) {
         std::cerr << "Encountered an error: " << error.what() << '\n';
