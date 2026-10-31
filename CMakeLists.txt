@@ -22,6 +22,7 @@ add_library(server_net
     server/net/winsock_runtime.cpp
     server/net/socket.cpp
     server/http/request_line.cpp
+    server/http/header.cpp
 )
 
 target_include_directories(server_net PUBLIC server)

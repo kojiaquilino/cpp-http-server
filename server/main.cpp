@@ -1,10 +1,13 @@
+#include "http/header.hpp"
 #include "http/request_line.hpp"
 #include "net/socket.hpp"
 #include "net/winsock_runtime.hpp"
 
 #include <iostream>
+#include <ranges>
 #include <stdexcept>    
 #include <string>
+#include <vector>
 #include <winsock2.h>
 #include <ws2tcpip.h> // Address conversion functions
 
@@ -135,16 +138,40 @@ int main() {
                             std::cerr << "Rejected connection: HTTP headers exceed limit.\n";
                             break; // Close connection when exceeding header size
                         }
+
+                        // Start parsing header fields once received sufficient bytes
+                        RequestLine r;
+                        std::vector<Header> headers;
                         
                         //// PARSE REQUEST LINE OF HTTP REQUEST ////
 
                         const auto request_line_end = incoming.find("\r\n"); // Request line terminator
 
                         try {
-                            RequestLine r{parse_request_line(incoming.substr(0, request_line_end))};
+                            r = parse_request_line(incoming.substr(0, request_line_end));
                             std::cout << ("Output: " + r.method + ' ' + r.target + ' ' + r.version) << '\n'; 
                         } catch(const std::exception& error) {
-                            std::cerr << "Encountered an error: " << error.what() << '\n';
+                            std::cerr << "Encountered an error when parsing request line: " << error.what() << '\n';
+                        }
+
+                        //// PARSE REMAINING HTTP HEADERS ////
+                        try {
+                            std::string headers_data{incoming.substr(request_line_end + 2, header_end)};
+                            auto header_lines = std::views::split(headers_data, '\r\n');
+                            auto num_headers = std::ranges::distance(header_lines);
+
+                            // Must contain at least one header in the HTTP request
+                            if(num_headers == 0) {
+                                throw std::invalid_argument("HTTP request must contain at least one header");
+                            }
+
+                            for(const auto& h : header_lines) {
+                                const std::string_view header{std::string_view(h.begin(), h.end())};
+                                headers.push_back(parse_header_line(header));
+                            } 
+
+                        } catch(const std::exception& error) {
+                            std::cerr << "Encountered an error when parsing headers : " << error.what() << '\n';
                         }
 
                         break;

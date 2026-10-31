@@ -66,7 +66,7 @@ RequestLine parse_request_line(std::string_view line) {
 
         // Different checks based on request line field
         switch(index) {
-            case 0: {
+            case 0: { // HTTP Method
                 // Validate all characters in method
                 if(has_invalid_method_character(field)) {
                     throw std::invalid_argument("Invalid HTTP method");
@@ -75,7 +75,7 @@ RequestLine parse_request_line(std::string_view line) {
                 r.method = field;
                 break;
             }
-            case 1: {
+            case 1: { // HTTP Target Path
                 // Must start with '/'
                 if(field.front() != '/') {
                     throw std::invalid_argument("Requested path must start with '/'");
@@ -89,7 +89,7 @@ RequestLine parse_request_line(std::string_view line) {
                 r.target = field;
                 break;   
             }
-            case 2: {
+            case 2: { // HTTP Version
                 if(field != "HTTP/1.1") {
                     throw std::invalid_argument("HTTP requests require version HTTP/1.1");
                 }
