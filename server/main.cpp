@@ -136,20 +136,18 @@ int main() {
                             break; // Close connection when exceeding header size
                         }
                         
-                        std::cout << "Headers complete\n";
-                        
                         //// PARSE REQUEST LINE OF HTTP REQUEST ////
 
                         const auto request_line_end = incoming.find("\r\n"); // Request line terminator
 
                         try {
                             RequestLine r{parse_request_line(incoming.substr(0, request_line_end))};
-                            std::cout << (r.method + ' ' + r.target + ' ' + r.version) << '\n'; 
+                            std::cout << ("Output: " + r.method + ' ' + r.target + ' ' + r.version) << '\n'; 
                         } catch(const std::exception& error) {
                             std::cerr << "Encountered an error: " << error.what() << '\n';
-                            break;
                         }
 
+                        break;
                     }
 
                     // Enforce header max size constraint when no escape sequence found
