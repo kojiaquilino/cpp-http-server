@@ -124,16 +124,23 @@ int main() {
                     incoming.append(buffer, static_cast<std::size_t>(received));
                     const auto header_end = incoming.find("\r\n\r\n"); // Header terminator escape sequence
 
-                    // Enforce header max size constraint
-                    if((header_end == std::string::npos && incoming.size() >= max_header_bytes) || // Escape sequence not found -- compare entire size against 20KiB limit
-                        header_end + 4 >= max_header_bytes)                                        // Compare up to header terminator start + 4 characters
+                    if(header_end != std::string::npos) {
+
+                        // Compare up to header terminator start + 4 characters
+                        if(header_end + 4 > max_header_bytes) {
+                            std::cerr << "Rejected connection: HTTP headers exceed limit.\n";
+                            break; // Close connection when exceeding header size
+                        }
+                        
+                        std::cout << "Headers complete\n";
+                        break;
+                    }
+
+                    // Enforce header max size constraint when no escape sequence found
+                    if(incoming.size() > max_header_bytes)
                     {
                         std::cerr << "Rejected connection: HTTP headers exceed limit.\n";
                         break; // Close connection when exceeding header size
-                    }
-
-                    if(header_end != std::string::npos) {
-                        std::cout << "Headers complete\n";
                     }
                 }
 
