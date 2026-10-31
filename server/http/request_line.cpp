@@ -6,15 +6,45 @@
 #include <string_view>
 
 namespace {
-    bool has_special_characters(std::string_view str) {
-        return std::any_of(str.begin(), str.end(), [](unsigned char c) {
-            return c > 127; // Check per character if ascii value > 127 (range of valid chars)
-        });
+
+    // Max size of a request line (-2 to reflect 2 bytes for CRLF control chars)
+    constexpr int max_request_line_bytes{4096 - 2};
+
+    // Validates method field of request line
+    bool has_invalid_method_character(std::string_view method) {
+        return std::any_of(
+            method.begin(),
+            method.end(),
+            [](unsigned char c) {
+                return !(c >= 'A' && c <= 'Z')
+                    && !(c >= 'a' && c <= 'z')
+                    && !(c >= '0' && c <- '9')
+                    && std::string_view{"!#$%&'*+-.^_`|~"}.find(c) == std::string_view::npos; // Use allowlist
+            }
+        );
+    }
+
+    // Validates target field of request line
+    bool has_invalid_target_character(std::string_view target) {
+        return std::any_of(
+            target.begin(),
+            target.end(),
+            [](unsigned char c) {
+                return c <= 32 || c >= 127;
+            }
+        );
     }
 }
 
 
 RequestLine parse_request_line(std::string_view line) {
+
+    // Reject request lines exceeding 4KiB limit
+    if(line.size() > max_request_line_bytes) {
+        throw std::invalid_argument("HTTP request line exceeds limit");
+    }
+
+
     auto fields = std::views::split(line, ' '); // Split delimited by ' '
     auto num_fields = std::ranges::distance(fields);
 
@@ -28,34 +58,47 @@ RequestLine parse_request_line(std::string_view line) {
     // Iterate over fields of request line
     for(size_t index{0}; const auto f : fields) {
         // Place request line field into std::string_view
-        const std::string_view request_field{std::string_view(f.begin(), f.end())};
+        const std::string_view field{std::string_view(f.begin(), f.end())};
 
-        if(request_field.size() == 0) {
+        if(field.size() == 0) {
             throw std::invalid_argument("Request fields in HTTP request must be nonempty");
-        }
-
-        if(has_special_characters(request_field)) {
-            throw std::invalid_argument("Request fields in HTTP request must not contain special characters");
         }
 
         // Different checks based on request line field
         switch(index) {
             case 0: {
-                r.method = request_field;    
+                // Validate all characters in method
+                if(has_invalid_method_character(field)) {
+                    throw std::invalid_argument("Invalid HTTP method");
+                }
+
+                r.method = field;
+                break;
             }
             case 1: {
-                if(request_field.front() != '/') {
+                // Must start with '/'
+                if(field.front() != '/') {
                     throw std::invalid_argument("Requested path must start with '/'");
                 }
-                r.target = request_field;   
+
+                // Validate all characters in target/path
+                if(has_invalid_target_character(field)) {
+                    throw std::invalid_argument("Invalid HTTP target");
+                }
+
+                r.target = field;
+                break;   
             }
             case 2: {
-                if(request_field != "HTTP/1.1") {
+                if(field != "HTTP/1.1") {
                     throw std::invalid_argument("HTTP requests require version HTTP/1.1");
                 }
-                r.version = request_field;  
+                r.version = field;  
+                break;
             }
         }
+
+        ++index;
     }
 
     return r;
