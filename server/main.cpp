@@ -155,15 +155,12 @@ int main() {
                         }
 
                         //// PARSE REMAINING HTTP HEADERS ////
-                        try {
-                            std::string headers_data{incoming.substr(request_line_end + 2, header_end)};
-                            auto header_lines = std::views::split(headers_data, '\r\n');
+                        
+                        try {                            
+                            const auto headers_start = request_line_end + 2;
+                            std::string headers_data{incoming.substr(headers_start, header_end - headers_start)};
+                            auto header_lines = std::views::split(headers_data, std::string_view{"\r\n"});
                             auto num_headers = std::ranges::distance(header_lines);
-
-                            // Must contain at least one header in the HTTP request
-                            if(num_headers == 0) {
-                                throw std::invalid_argument("HTTP request must contain at least one header");
-                            }
 
                             for(const auto& h : header_lines) {
                                 const std::string_view header{std::string_view(h.begin(), h.end())};
@@ -172,6 +169,7 @@ int main() {
 
                         } catch(const std::exception& error) {
                             std::cerr << "Encountered an error when parsing headers : " << error.what() << '\n';
+                            break;
                         }
 
                         break;
