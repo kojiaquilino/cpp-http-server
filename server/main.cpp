@@ -156,16 +156,19 @@ int main() {
 
                         //// PARSE REMAINING HTTP HEADERS ////
                         
-                        try {                            
-                            const auto headers_start = request_line_end + 2;
-                            std::string headers_data{incoming.substr(headers_start, header_end - headers_start)};
-                            auto header_lines = std::views::split(headers_data, std::string_view{"\r\n"});
-                            auto num_headers = std::ranges::distance(header_lines);
+                        try {
+                            if(header_end > request_line_end) {
+                                const auto headers_start = request_line_end + 2;
+                                std::string headers_data{incoming.substr(headers_start, header_end - headers_start)};
+                                auto header_lines = std::views::split(headers_data, std::string_view{"\r\n"});
 
-                            for(const auto& h : header_lines) {
-                                const std::string_view header{std::string_view(h.begin(), h.end())};
-                                headers.push_back(parse_header_line(header));
-                            } 
+                                for(const auto& h : header_lines) {
+                                    const std::string_view header{std::string_view(h.begin(), h.end())};
+                                    headers.push_back(parse_header_line(header));
+                                }
+                            } else {
+                                throw std::invalid_argument("Invalid HTTP header: header cannot be empty");
+                            }
 
                         } catch(const std::exception& error) {
                             std::cerr << "Encountered an error when parsing headers : " << error.what() << '\n';
