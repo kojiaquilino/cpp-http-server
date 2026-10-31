@@ -21,6 +21,7 @@ target_link_libraries(media_demo PRIVATE media_io)
 add_library(server_net
     server/net/winsock_runtime.cpp
     server/net/socket.cpp
+    server/http/request_line.cpp
 )
 
 target_include_directories(server_net PUBLIC server)

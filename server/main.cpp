@@ -1,3 +1,4 @@
+#include "http/request_line.hpp"
 #include "net/socket.hpp"
 #include "net/winsock_runtime.hpp"
 
@@ -122,7 +123,10 @@ int main() {
 
                     // Construct HTTP request and look for header terminator "\r\n\r\n"
                     incoming.append(buffer, static_cast<std::size_t>(received));
-                    const auto header_end = incoming.find("\r\n\r\n"); // Header terminator escape sequence
+
+                    //// PARSE HTTP REQUEST HEADER ////
+
+                    const auto header_end = incoming.find("\r\n\r\n"); // Header terminator
 
                     if(header_end != std::string::npos) {
 
@@ -133,11 +137,17 @@ int main() {
                         }
                         
                         std::cout << "Headers complete\n";
-                        break;
+                        
+                        //// PARSE REQUEST LINE OF HTTP REQUEST ////
+
+                        const auto request_line_end = incoming.find("\r\n"); // Request line terminator
+                        RequestLine r{parse_request_line(incoming.substr(0, request_line_end))};
+                        std::cout << r.method << '\n';
+
                     }
 
                     // Enforce header max size constraint when no escape sequence found
-                    if(incoming.size() > max_header_bytes)
+                    if(incoming.size() >= max_header_bytes)
                     {
                         std::cerr << "Rejected connection: HTTP headers exceed limit.\n";
                         break; // Close connection when exceeding header size
