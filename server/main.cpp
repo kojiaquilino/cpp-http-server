@@ -10,6 +10,7 @@
 namespace{
     constexpr DWORD receive_timeout_ms{10000};
     constexpr int receive_buffer_size{4096};
+    constexpr int max_header_bytes{20 * 1024};
 
     // Checks for errors involving SOCKET_ERROR
     void check_socket_error(int result, std::string method) {
@@ -108,8 +109,8 @@ int main() {
                 "setsockopt"
             );
 
-            // local buffer to store received data
-            char buffer[receive_buffer_size]{};
+            char buffer[receive_buffer_size]{}; // local buffer to store received raw character data
+            std::string incoming;               // retain received bytes across multiple reads --> construct http headers
 
             while(true) {
                 int received {
@@ -118,14 +119,30 @@ int main() {
 
                 // Connection received "received" bytes via socket
                 if(received > 0) {
-                    std::cout.write(buffer, received);
-                    std::cout.flush();
-                } 
+
+                    // Construct HTTP request and look for header terminator "\r\n\r\n"
+                    incoming.append(buffer, static_cast<std::size_t>(received));
+                    const auto header_end = incoming.find("\r\n\r\n"); // Header terminator escape sequence
+
+                    // Enforce header max size constraint
+                    if((header_end == std::string::npos && incoming.size() >= max_header_bytes) || // Escape sequence not found -- compare entire size against 20KiB limit
+                        header_end + 4 >= max_header_bytes)                                        // Compare up to header terminator start + 4 characters
+                    {
+                        std::cerr << "Rejected connection: HTTP headers exceed limit.\n";
+                        break; // Close connection when exceeding header size
+                    }
+
+                    if(header_end != std::string::npos) {
+                        std::cout << "Headers complete\n";
+                    }
+                }
+
                 // Connection closed by client
                 else if(received == 0) {
                     break;
                 }
-                // SOCKET_ERROR: report error
+
+                // SOCKET_ERROR: report error 
                 else {
                     const int error{WSAGetLastError()};
                     std::cerr << "recv() failed with error code: " + std::to_string(error) << '\n';
