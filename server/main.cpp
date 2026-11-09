@@ -129,7 +129,8 @@ int main() {
 
                     //// PARSE HTTP REQUEST HEADER ////
 
-                    const auto header_end = incoming.find("\r\n\r\n"); // Header terminator
+                    // Header terminator
+                    const auto header_end = incoming.find("\r\n\r\n");
 
                     if(header_end != std::string::npos) {
 

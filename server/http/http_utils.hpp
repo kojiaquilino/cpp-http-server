@@ -1,11 +1,34 @@
 #pragma once
 
 #include <algorithm>
-#include <cctype>
 #include <string>
 
-// Trimming a string
 
+// Convert enum class values into underlying integer
+template <typename T>
+constexpr auto to_int(T t) noexcept {
+    return static_cast<std::underlying_type_t<T>>(t);
+}
+
+// header_name is lowercase by default
+constexpr HeaderType classify_header(std::string header_name) {
+    if(header_name == "host") return HeaderType::Host;
+    if(header_name == "content-length") return HeaderType::ContentLength;
+    if(header_name == "transfer-encoding") return HeaderType::TransferEncoding;
+    return HeaderType::Other; // default
+}
+
+// Convert enum to string
+constexpr std::string header_to_string(HeaderType header) {
+    switch(header) {
+        case HeaderType::Host:              return "Host";
+        case HeaderType::ContentLength:     return "Content-Length";
+        case HeaderType::TransferEncoding:  return "Transfer-Encoding";
+    }
+    return "Other";
+}
+
+// Trimming a string
 inline void ltrim(std::string& str) {
     str.erase(str.begin(), std::find_if(str.begin(), str.end(), [](unsigned char ch) {
         return ch != ' ' && ch != '\t'; // Find first nonspace character
