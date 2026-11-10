@@ -236,16 +236,18 @@ int main() {
                                     std::cerr << "Rejected request: an unknown error has occurred.\n";
                                     break; 
                                 }
-
-                                // Request did not send enough bytes to complete body:
-                                // Reject request with incomplete body
-                                if(request_body.size() == expected_body_bytes) {
-                                    std::cout << "Request body complete. Expected: "
-                                            << expected_body_bytes
-                                            << " bytes; received: "
-                                            << request_body.size() << " bytes\n";
-                                }
                             }
+
+                            // Request did not send enough bytes to complete body:
+                            // Reject request with incomplete body
+                            if(request_body.size() == expected_body_bytes) {
+                                std::cout << "Request body complete. Expected: "
+                                        << expected_body_bytes
+                                        << " bytes; received: "
+                                        << request_body.size() << " bytes\n";
+                            }
+
+
                         } catch (const std::exception& error) {
                             std::cerr << "Encountered an error: " << error.what() << '\n';
                         }
