@@ -40,6 +40,56 @@ namespace{
         }
     }
 
+    /// @brief Rejects the request if its receive deadline has expired.
+    /// @param deadline The deadline by which the request must be received.
+    void check_request_deadline(RequestClock::time_point deadline) {
+        if(RequestClock::now() >= deadline) {
+            throw std::runtime_error(
+                "Request rejected: receive deadline expired"
+            );
+        }
+    }
+
+    /// @brief Configures the socket to wait only until the request deadline.
+    /// @param connection The socket receiving the request.
+    /// @param deadline The deadline by which the request must be received.
+    void prepare_receive(
+        const Socket& connection,
+        RequestClock::time_point deadline
+    ) {
+        // Get current time
+        const auto now = RequestClock::now();
+
+        // Compare deadline with elapsed time, and reject if passed deadline
+        if(now >= deadline) {
+            throw std::runtime_error(
+                "Request rejected: receive deadline expired"
+            );
+        }
+
+        // Updates remaining time, rounding up to nearest millisecond
+        const auto remaining =
+            std::chrono::ceil<std::chrono::milliseconds>(
+                deadline - now
+            );
+
+        // How long the next recv() can block while waiting for data
+        const DWORD timeout_ms = static_cast<DWORD>(remaining.count());
+
+        if(::setsockopt(
+            connection.native_handle(),
+            SOL_SOCKET,
+            SO_RCVTIMEO,
+            reinterpret_cast<const char*>(&timeout_ms),
+            sizeof(timeout_ms)
+        ) == SOCKET_ERROR) {
+            throw std::runtime_error(
+                "Request rejected: failed to configure receive timeout"
+            );
+        }
+
+    }
+
 
     /// @brief Parses the HTTP header lines that follow the request line.
     /// @param headers The vector to which parsed headers are appended.
@@ -255,57 +305,6 @@ namespace{
 
         return connection;
     }
-
-    /// @brief Rejects the request if its receive deadline has expired.
-    /// @param deadline The deadline by which the request must be received.
-    void check_request_deadline(RequestClock::time_point deadline) {
-        if(RequestClock::now() >= deadline) {
-            throw std::runtime_error(
-                "Request rejected: receive deadline expired"
-            );
-        }
-    }
-
-    /// @brief Configures the socket to wait only until the request deadline.
-    /// @param connection The socket receiving the request.
-    /// @param deadline The deadline by which the request must be received.
-    void prepare_receive(
-        const Socket& connection,
-        RequestClock::time_point deadline
-    ) {
-        // Get current time
-        const auto now = RequestClock::now();
-
-        // Compare deadline with elapsed time, and reject if passed deadline
-        if(now >= deadline) {
-            throw std::runtime_error(
-                "Request rejected: receive deadline expired"
-            );
-        }
-
-        // Updates remaining time, rounding up to nearest millisecond
-        const auto remaining =
-            std::chrono::ceil<std::chrono::milliseconds>(
-                deadline - now
-            );
-
-        // How long the next recv() can block while waiting for data
-        const DWORD timeout_ms = static_cast<DWORD>(remaining.count());
-
-        if(::setsockopt(
-            connection.native_handle(),
-            SOL_SOCKET,
-            SO_RCVTIMEO,
-            reinterpret_cast<const char*>(&timeout_ms),
-            sizeof(timeout_ms)
-        ) == SOCKET_ERROR) {
-            throw std::runtime_error(
-                "Request rejected: failed to configure receive timeout"
-            );
-        }
-
-    }
-
     
     /// @brief Receives and parses one HTTP request from the client connection.
     /// @param connection The client socket from which request bytes are received.
@@ -331,67 +330,72 @@ namespace{
             };
    
             if(received_bytes > 0) {
-                check_request_deadline(deadline);
+                try {
+                    check_request_deadline(deadline);
 
-                // Construct HTTP request and search for header terminator "\r\n\r\n"
-                incoming_bytes.append(buffer, static_cast<std::size_t>(received_bytes));
-                const auto headers_end_idx = incoming_bytes.find("\r\n\r\n");
+                    // Construct HTTP request and search for header terminator "\r\n\r\n"
+                    incoming_bytes.append(buffer, static_cast<std::size_t>(received_bytes));
+                    const auto headers_end_idx = incoming_bytes.find("\r\n\r\n");
 
-                if(headers_end_idx != std::string::npos) {
-                    
-                    // Compare up to header terminator start + 4 characters
-                    if(headers_end_idx + 4 > max_header_bytes) {
-                        std::cerr << "Rejected connection: HTTP headers exceed limit.\n";
-                        break; // Close connection when exceeding header size
-                    }
-
-                    RequestLine request_line;
-                    std::vector<Header> headers;
-                    std::string body;
-
-                    const auto request_line_end_idx = incoming_bytes.find("\r\n"); // finds end of first line
-
-                    // Populate request line of HTTP request
-                    try {
-                        request_line = parse_request_line(incoming_bytes.substr(0, request_line_end_idx));
-                        std::cout << ("Output: " + request_line.method + ' ' + request_line.target + ' ' + request_line.version) << '\n';
-                    } catch(const std::exception& error) {
-                        std::cerr << "Encountered an error when parsing request line: " << error.what() << '\n';
-                        break; // Ends current receive_request() on error
-                    }
-
-                    // Parse and populate remaining HTTP request headers after request line
-                    if(!parse_remaining_request_headers(headers, incoming_bytes, headers_end_idx, request_line_end_idx)) {
-                        break; // Ends current receive_request() when failing to parse headers
-                    }
-
-                    // Validate populated headers and extract header values
-                    // Currently retrieves Content-Length: number of body bytes to receive from HTTP request
-                    try {
-                        const auto request_framing = validate_request_headers(headers);
-                        const auto expected_body_bytes = request_framing.content_length.value_or(0); // content_bytes is optional
-                        const auto body_start_idx = headers_end_idx + 4; // +4 to pass CRLF control characters dividing header + body
+                    if(headers_end_idx != std::string::npos) {
                         
-                        if(!parse_request_body(connection, incoming_bytes, buffer, body, expected_body_bytes, body_start_idx, deadline)) {
-                            break; // Ends current receive_request() when failing to populate request body
+                        // Compare up to header terminator start + 4 characters
+                        if(headers_end_idx + 4 > max_header_bytes) {
+                            std::cerr << "Rejected connection: HTTP headers exceed limit.\n";
+                            break; // Close connection when exceeding header size
                         }
 
-                        // Check elapsed time against deadline
-                        check_request_deadline(deadline);
+                        RequestLine request_line;
+                        std::vector<Header> headers;
+                        std::string body;
 
-                        // Return successfully parsed request
-                        return Request{
-                            request_line,
-                            headers,
-                            body
-                        };
-                    } catch(const std::exception& error) {
-                        std::cerr << "Encountered an error when validating HTTP request headers: " << error.what() << '\n';
+                        const auto request_line_end_idx = incoming_bytes.find("\r\n"); // finds end of first line
+
+                        // Populate request line of HTTP request
+                        try {
+                            request_line = parse_request_line(incoming_bytes.substr(0, request_line_end_idx));
+                            std::cout << ("Output: " + request_line.method + ' ' + request_line.target + ' ' + request_line.version) << '\n';
+                        } catch(const std::exception& error) {
+                            std::cerr << "Encountered an error when parsing request line: " << error.what() << '\n';
+                            break; // Ends current receive_request() on error
+                        }
+
+                        // Parse and populate remaining HTTP request headers after request line
+                        if(!parse_remaining_request_headers(headers, incoming_bytes, headers_end_idx, request_line_end_idx)) {
+                            break; // Ends current receive_request() when failing to parse headers
+                        }
+
+                        // Validate populated headers and extract header values
+                        // Currently retrieves Content-Length: number of body bytes to receive from HTTP request
+                        try {
+                            const auto request_framing = validate_request_headers(headers);
+                            const auto expected_body_bytes = request_framing.content_length.value_or(0); // content_bytes is optional
+                            const auto body_start_idx = headers_end_idx + 4; // +4 to pass CRLF control characters dividing header + body
+                            
+                            if(!parse_request_body(connection, incoming_bytes, buffer, body, expected_body_bytes, body_start_idx, deadline)) {
+                                break; // Ends current receive_request() when failing to populate request body
+                            }
+
+                            // Check elapsed time against deadline
+                            check_request_deadline(deadline);
+
+                            // Return successfully parsed request
+                            return Request{
+                                request_line,
+                                headers,
+                                body
+                            };
+                        } catch(const std::exception& error) {
+                            std::cerr << "Encountered an error when validating HTTP request headers: " << error.what() << '\n';
+                            break;
+                        }
+
+                    } else if(incoming_bytes.size() >= max_header_bytes) {
+                        std::cerr << "Rejected connection: HTTP headers exceed byte limit.\n";
                         break;
                     }
-
-                } else if(incoming_bytes.size() >= max_header_bytes) {
-                    std::cerr << "Rejected connection: HTTP headers exceed byte limit.\n";
+                } catch(const std::exception& error) {
+                    std::cerr << "Encountered an error when parsing HTTP request: " << error.what() << '\n';
                     break;
                 }
             } 
