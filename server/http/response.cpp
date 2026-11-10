@@ -8,7 +8,7 @@
 std::string serialize_response(const Response& response) {
     std::string serialized{};
     auto [status_code, reason_phrase, content_type, body] = response;
-    const auto validate_content = [](std::string content) { // prevent control characters from corrupting response headers
+    const auto validate_content = [](const std::string& content) { // prevent control characters from corrupting response headers
         return std::all_of(
             content.begin(),
             content.end(),
