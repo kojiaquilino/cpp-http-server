@@ -6,6 +6,7 @@
 #include "net/winsock_runtime.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <iostream>
 #include <optional>
 #include <ranges>
@@ -14,6 +15,8 @@
 #include <vector>
 #include <winsock2.h>
 #include <ws2tcpip.h> // Address conversion functions
+
+using RequestClock = std::chrono::steady_clock;
 
 namespace{
     constexpr DWORD receive_timeout_ms{10000};
@@ -88,9 +91,13 @@ namespace{
         char (&buffer)[receive_buffer_size],
         std::string& request_body,
         std::size_t expected_body_bytes,
-        std::size_t body_start_idx
+        std::size_t body_start_idx,
+        RequestClock::time_point deadline
     ) noexcept {
         try {
+            // Throw error and return early if deadline elapsed
+            check_request_deadline(deadline);
+
             if(expected_body_bytes == 0) {
                 std::cout << "No body attached to current HTTP request.\n";
                 return true;
@@ -104,6 +111,9 @@ namespace{
                 const auto remaining_bytes = expected_body_bytes - request_body.size();
                 const auto bytes_to_read = std::min(remaining_bytes, static_cast<std::size_t>(receive_buffer_size));
 
+                // Update receive deadline for receiving bytes for constructing request body
+                prepare_receive(connection, deadline);
+
                 int received_bytes {
                     ::recv(
                         connection.native_handle(),
@@ -114,7 +124,13 @@ namespace{
                 };
 
                 if(received_bytes > 0) {
-                    request_body.append(buffer, static_cast<std::size_t>(received_bytes));
+                    // Check elapsed time against deadline
+                    check_request_deadline(deadline);
+
+                    request_body.append(
+                        buffer,
+                        static_cast<std::size_t>(received_bytes)
+                    );
                 }
 
                 // Request did not send enough bytes to complete body
@@ -136,6 +152,9 @@ namespace{
                     return false;
                 }
             }
+
+            // Check elapsed time against deadline
+            check_request_deadline(deadline);
 
             // Report successful body completion.
             std::cout << "Request body complete. Expected: "
@@ -228,25 +247,81 @@ namespace{
                 accepted_handle,                                    // Socket to modify
                 SOL_SOCKET,                                         // Specify option belonging to socket layer
                 SO_RCVTIMEO,                                        // Set receive timeout
-                reinterpret_cast<const char*>(&receive_timeout_ms), // Timeout value: default=10000ms
-                static_cast<int>(sizeof(receive_timeout_ms))        // Size of opton value
+                reinterpret_cast<const char*>(&receive_timeout_ms), // Timeout value: default=10000ms (address of value)
+                static_cast<int>(sizeof(receive_timeout_ms))        // Size of option value (in this case, timeout)
             ),
             "setsockopt"
         );
 
         return connection;
     }
+
+    /// @brief Rejects the request if its receive deadline has expired.
+    /// @param deadline The deadline by which the request must be received.
+    void check_request_deadline(RequestClock::time_point deadline) {
+        if(RequestClock::now() >= deadline) {
+            throw std::runtime_error(
+                "Request rejected: receive deadline expired"
+            );
+        }
+    }
+
+    /// @brief Configures the socket to wait only until the request deadline.
+    /// @param connection The socket receiving the request.
+    /// @param deadline The deadline by which the request must be received.
+    void prepare_receive(
+        const Socket& connection,
+        RequestClock::time_point deadline
+    ) {
+        // Get current time
+        const auto now = RequestClock::now();
+
+        // Compare deadline with elapsed time, and reject if passed deadline
+        if(now >= deadline) {
+            throw std::runtime_error(
+                "Request rejected: receive deadline expired"
+            );
+        }
+
+        // Updates remaining time, rounding up to nearest millisecond
+        const auto remaining =
+            std::chrono::ceil<std::chrono::milliseconds>(
+                deadline - now
+            );
+
+        // How long the next recv() can block while waiting for data
+        const DWORD timeout_ms = static_cast<DWORD>(remaining.count());
+
+        if(::setsockopt(
+            connection.native_handle(),
+            SOL_SOCKET,
+            SO_RCVTIMEO,
+            reinterpret_cast<const char*>(&timeout_ms),
+            sizeof(timeout_ms)
+        ) == SOCKET_ERROR) {
+            throw std::runtime_error(
+                "Request rejected: failed to configure receive timeout"
+            );
+        }
+
+    }
+
     
     /// @brief Receives and parses one HTTP request from the client connection.
     /// @param connection The client socket from which request bytes are received.
     /// @return The parsed request, or `std::nullopt` if the connection closes or the request is invalid.
     std::optional<Request> receive_request(const Socket& connection) {
-        char buffer[receive_buffer_size]{}; // local buffer to store received raw character data
-        std::string incoming_bytes;         // retain received bytes across multiple reads: used for constructing http headers
+        char buffer[receive_buffer_size]{};                                   // local buffer to store received raw character data
+        std::string incoming_bytes;                                           // retain received bytes across multiple reads: used for constructing http headers
+        const auto deadline = RequestClock::now() + std::chrono::seconds{10}; // Initialize response receive timeout (default=10 seconds)
         
         // Continuously accumulate bytes from incoming HTTP request
         while(true) {
-            int num_bytes_received {
+
+            // Update receive deadline for receiving bytes + parsing response
+            prepare_receive(connection, deadline);
+            
+            int received_bytes {
                 ::recv(
                     connection.native_handle(), // Socket to receive data from
                     buffer,                     // Destination buffer
@@ -255,10 +330,11 @@ namespace{
                 )
             };
    
-            if(num_bytes_received > 0) {
+            if(received_bytes > 0) {
+                check_request_deadline(deadline);
 
                 // Construct HTTP request and search for header terminator "\r\n\r\n"
-                incoming_bytes.append(buffer, static_cast<std::size_t>(num_bytes_received));
+                incoming_bytes.append(buffer, static_cast<std::size_t>(received_bytes));
                 const auto headers_end_idx = incoming_bytes.find("\r\n\r\n");
 
                 if(headers_end_idx != std::string::npos) {
@@ -296,9 +372,12 @@ namespace{
                         const auto expected_body_bytes = request_framing.content_length.value_or(0); // content_bytes is optional
                         const auto body_start_idx = headers_end_idx + 4; // +4 to pass CRLF control characters dividing header + body
                         
-                        if(!parse_request_body(connection, incoming_bytes, buffer, body, expected_body_bytes, body_start_idx)) {
+                        if(!parse_request_body(connection, incoming_bytes, buffer, body, expected_body_bytes, body_start_idx, deadline)) {
                             break; // Ends current receive_request() when failing to populate request body
                         }
+
+                        // Check elapsed time against deadline
+                        check_request_deadline(deadline);
 
                         // Return successfully parsed request
                         return Request{
@@ -318,7 +397,7 @@ namespace{
             } 
             
             // Connection closed by client
-            else if(num_bytes_received == 0) {
+            else if(received_bytes == 0) {
                 break;
             }
 
