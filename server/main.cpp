@@ -187,61 +187,65 @@ int main() {
 
                         /// 8. Validate collected headers and extract header values
                         // Extracts Content-Length to get number of body bytes to receive from HTTP request
-                        const auto request_framing = validate_request_headers(headers);
-                        const auto expected_body_bytes = request_framing.content_length.value_or(0); // content_bytes is optional
-                        const auto body_start = header_end + 4; // +4 to account for CRLF char sequence
-                        
-                        // No body attached: complete immediately
-                        if(expected_body_bytes == 0) {
-                            std::cout << "No body attached to current HTTP request.\n";
-                            break;
-                        }
-
-                        // Append current body bytes previously received with header
-                        std::string request_body{incoming.substr(body_start)};
-
-                        while(request_body.size() < expected_body_bytes) {
-                            const auto remaining = expected_body_bytes - request_body.size();
-                            const auto bytes_to_read = min(remaining, static_cast<std::size_t>(receive_buffer_size));
-
-                            int received {
-                                ::recv(
-                                    connection.native_handle(),
-                                    buffer,
-                                    bytes_to_read,
-                                    0
-                                )
-                            };
-
-                            if(received > 0) {
-                                request_body.append(buffer, static_cast<std::size_t>(received));
-                            } 
+                        try {
+                            const auto request_framing = validate_request_headers(headers);
+                            const auto expected_body_bytes = request_framing.content_length.value_or(0); // content_bytes is optional
+                            const auto body_start = header_end + 4; // +4 to account for CRLF char sequence
                             
-                            // Request did not send enough bytes to complete body:
-                            // Reject request with incomplete body
-                            else if(received == 0) {
-                                std::cerr << "Rejected request: client disconnected before the body was complete.\n";
+                            // No body attached: complete immediately
+                            if(expected_body_bytes == 0) {
+                                std::cout << "No body attached to current HTTP request.\n";
                                 break;
                             }
 
-                            else if (received == SOCKET_ERROR) {
-                                const int error = ::WSAGetLastError();
-                                std::cerr << "Rejected request: body receive failed "
-                                          << "(Winsock error " << error << ").\n";
-                                return; // If inside handle_connection().
-                            }
+                            // Append current body bytes previously received with header
+                            std::string request_body{incoming.substr(body_start, expected_body_bytes)};
 
-                            // Expected length == 0:
-                            // Received enough bytes: complete without another recv()
-                            else if(remaining == 0) {
-                                std::cout << "Received sufficient body bytes. Total: ", request_body.size(), " bytes\n";
-                                break;
-                            }
+                            while(request_body.size() < expected_body_bytes) {
+                                const auto remaining = expected_body_bytes - request_body.size();
+                                const auto bytes_to_read = min(remaining, static_cast<std::size_t>(receive_buffer_size));
 
-                            else {
-                                std::cerr << "Rejected request: an unknown error has occurred.\n";
-                                break; 
+                                int received {
+                                    ::recv(
+                                        connection.native_handle(),
+                                        buffer,
+                                        bytes_to_read,
+                                        0
+                                    )
+                                };
+
+                                if(received > 0) {
+                                    request_body.append(buffer, static_cast<std::size_t>(received));
+                                } 
+                                
+                                // Request did not send enough bytes to complete body:
+                                // Reject request with incomplete body
+                                else if(received == 0) {
+                                    std::cerr << "Rejected request: client disconnected before the body was complete.\n";
+                                    break;
+                                }
+
+                                else if (received == SOCKET_ERROR) {
+                                    const int error = ::WSAGetLastError();
+                                    std::cerr << "Rejected request: body receive failed "
+                                            << "(Winsock error " << error << ").\n";
+                                    break;
+                                }
+
+                                // Expected length == request_body's size:
+                                // Received enough bytes: complete without another recv()
+                                else if(request_body.size() == expected_body_bytes) {
+                                    std::cout << "Received sufficient body bytes. Total: " <<  request_body.size() << " bytes\n";
+                                    break;
+                                }
+
+                                else {
+                                    std::cerr << "Rejected request: an unknown error has occurred.\n";
+                                    break; 
+                                }
                             }
+                        } catch (const std::exception& error) {
+                            std::cerr << "Encountered an error: " << error.what() << '\n';
                         }
 
                         break;
