@@ -30,7 +30,7 @@ int main() {
         WinsockRuntime runtime; // Start windows socket library
         std::cout << "Winsock initialized.\n";
 
-        //// CREATE LISTENER SOCKET ////
+        /// 1. Create listener socket
 
         SOCKET raw_listener_handle{::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)};
 
@@ -55,7 +55,7 @@ int main() {
         }
 
 
-        //// BIND SOCKET TO ADDRESS ////
+        /// 2. Bind socket to address
 
         // Bind socket to local ip address and port
         int bind_result{
@@ -72,7 +72,7 @@ int main() {
         }
 
 
-        //// START LISTENER SOCKET ON SPECIFIED ADDRESS AND PORT ////
+        /// 3. Start listener socket on specified address and port number
 
 
         // Start listening on address and port via listener socket
@@ -84,7 +84,8 @@ int main() {
         std::cout << "Listening on 127.0.0.1:8080.\n";
         
 
-        //// RECEIVE AND ACCEPT INCOMING CONNECTIONS ////
+        /// 4. Receive and accept incoming connections
+        // Currently closes accepted socket after receiving one request
 
         while(true) {
             
@@ -118,7 +119,12 @@ int main() {
 
             while(true) {
                 int received {
-                    ::recv(connection.native_handle(), buffer, sizeof(buffer), 0)
+                    ::recv(
+                        connection.native_handle(), // Socket to receive data from
+                        buffer,                     // Destination buffer
+                        sizeof(buffer),             // Maximum number of bytes to receive
+                        0                           // Flags (0=default)
+                    )
                 };
 
                 // Connection received "received" bytes via socket
@@ -127,11 +133,11 @@ int main() {
                     // Construct HTTP request and look for header terminator "\r\n\r\n"
                     incoming.append(buffer, static_cast<std::size_t>(received));
 
-                    //// PARSE HTTP REQUEST HEADER ////
-
+                    /// 5. Begin parsing HTTP request header
                     // Header terminator
                     const auto header_end = incoming.find("\r\n\r\n");
 
+                    // Begin parsing headers once located CRLF sequence in received bytes
                     if(header_end != std::string::npos) {
 
                         // Compare up to header terminator start + 4 characters
@@ -144,19 +150,19 @@ int main() {
                         RequestLine r;
                         std::vector<Header> headers;
                         
-                        //// PARSE REQUEST LINE OF HTTP REQUEST ////
+                        /// 6. Parse request line of HTTP request
 
                         const auto request_line_end = incoming.find("\r\n"); // Request line terminator
 
                         try {
                             r = parse_request_line(incoming.substr(0, request_line_end));
-                            std::cout << ("Output: " + r.method + ' ' + r.target + ' ' + r.version) << '\n'; 
+                            std::cout << ("Output: " + r.method + ' ' + r.target + ' ' + r.version) << '\n';
                         } catch(const std::exception& error) {
                             std::cerr << "Encountered an error when parsing request line: " << error.what() << '\n';
                             break; // Reject connection and move onto receiving next incoming request
                         }
 
-                        //// PARSE REMAINING HTTP HEADERS ////
+                        /// 7. Parse remaining HTTP headers after the request line
                         
                         try {
                             if(header_end > request_line_end) {
@@ -174,13 +180,68 @@ int main() {
                             } else {
                                 throw std::invalid_argument("Invalid HTTP header: header cannot be empty");
                             }
-
-                            // Validate all collected headers and extract header values
-                            const auto request_framing = validate_request_headers(headers);
-
                         } catch(const std::exception& error) {
                             std::cerr << "Encountered an error when parsing headers : " << error.what() << '\n';
                             break;
+                        }
+
+                        /// 8. Validate collected headers and extract header values
+                        // Extracts Content-Length to get number of body bytes to receive from HTTP request
+                        const auto request_framing = validate_request_headers(headers);
+                        const auto expected_body_bytes = request_framing.content_length.value_or(0); // content_bytes is optional
+                        const auto body_start = header_end + 4; // +4 to account for CRLF char sequence
+                        
+                        // No body attached: complete immediately
+                        if(expected_body_bytes == 0) {
+                            std::cout << "No body attached to current HTTP request.\n";
+                            break;
+                        }
+
+                        // Append current body bytes previously received with header
+                        std::string request_body{incoming.substr(body_start)};
+
+                        while(request_body.size() < expected_body_bytes) {
+                            const auto remaining = expected_body_bytes - request_body.size();
+                            const auto bytes_to_read = min(remaining, static_cast<std::size_t>(receive_buffer_size));
+
+                            int received {
+                                ::recv(
+                                    connection.native_handle(),
+                                    buffer,
+                                    bytes_to_read,
+                                    0
+                                )
+                            };
+
+                            if(received > 0) {
+                                request_body.append(buffer, static_cast<std::size_t>(received));
+                            } 
+                            
+                            // Request did not send enough bytes to complete body:
+                            // Reject request with incomplete body
+                            else if(received == 0) {
+                                std::cerr << "Rejected request: client disconnected before the body was complete.\n";
+                                break;
+                            }
+
+                            else if (received == SOCKET_ERROR) {
+                                const int error = ::WSAGetLastError();
+                                std::cerr << "Rejected request: body receive failed "
+                                          << "(Winsock error " << error << ").\n";
+                                return; // If inside handle_connection().
+                            }
+
+                            // Expected length == 0:
+                            // Received enough bytes: complete without another recv()
+                            else if(remaining == 0) {
+                                std::cout << "Received sufficient body bytes. Total: ", request_body.size(), " bytes\n";
+                                break;
+                            }
+
+                            else {
+                                std::cerr << "Rejected request: an unknown error has occurred.\n";
+                                break; 
+                            }
                         }
 
                         break;
