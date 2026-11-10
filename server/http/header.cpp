@@ -46,7 +46,7 @@ namespace {
     }
 
     // Validate hostname
-    bool is_valid_hostname(std::string_view hostname) {
+    void validate_hostname(std::string_view hostname) {
         // Allow one optional trailing dot
         if(!hostname.empty() && hostname.back() == '.') {
             hostname.remove_suffix(1);
@@ -170,25 +170,25 @@ namespace {
 
 
     // Validate value of Host header
-    void validate_host(std::string_view host) {
-        if(host.empty()) {
+    void validate_host(std::string_view host_authority) {
+        if(host_authority.empty()) {
             throw std::invalid_argument("Host value cannot be empty");
         }
 
 
-        const bool is_ipv6{host.front() == '['};
+        const bool is_ipv6{host_authority.front() == '['};
         std::string_view port;
     
         if(is_ipv6) {
             // find ipv6 terminating bracket
-            const auto closing_bracket = host.find(']');
+            const auto closing_bracket = host_authority.find(']');
 
             if(closing_bracket == std::string::npos) {
                 throw std::invalid_argument("Missing closing IPv6 bracket");
             }
 
             // Exclude enclosing brackets
-            std::string_view ipv6_address{host.substr(1, closing_bracket - 1)};
+            std::string_view ipv6_address{host_authority.substr(1, closing_bracket - 1)};
             if(!is_valid_ipv6(ipv6_address)) {
                 throw std::invalid_argument("IPv6 address as hostname is malformed");
             }
@@ -196,14 +196,18 @@ namespace {
             // Either pointing to colon or no character
             std::size_t hostname_end{closing_bracket + 1};
 
-            if(hostname_end == host.size())         return; // No port attached to hostname, report valid host header (containing only hostname)
-            else if(host.at(hostname_end) == ':')   port = host.substr(hostname_end + 1); // Get port string as host substring 
-            else                                    throw std::invalid_argument("Missing colon delimiter between hostname and port");
+            if(hostname_end == host_authority.size())       return; // No port attached to hostname, report valid host header (containing only hostname)
+            else if(host_authority.at(hostname_end) == ':') port = host_authority.substr(hostname_end + 1); // Get port string as host substring 
+            else                                            throw std::invalid_argument("Missing colon delimiter between hostname and port");
         } else {
 
             // Might not exist, then just take whole string as IPv4 address or hostname
-            const auto delimiter = host.find(':');
+            const auto delimiter = host_authority.find(':');
 
+            // Represented either as a hostname of IPv4 address
+            std::string_view host{host_authority.substr(0, delimiter)};
+
+            // Check whether the host is in IPv4 format or as a hostname
             const bool is_ipv4{
                 host.find('.') != std::string::npos
                 && std::all_of(
@@ -214,21 +218,18 @@ namespace {
                     })
             };
 
+            // Validate IPv4 foramt
             if(is_ipv4) {
-                std::string_view ipv4_address{host.substr(0, delimiter)};
-                if(!is_valid_ipv4(ipv4_address)) {
+                if(!is_valid_ipv4(host)) {
                     throw std::invalid_argument("IPv4 address as hostname is malformed");
                 }
+
+            // Validate hostname format
             } else {
-                std::string_view hostname{host.substr(0, delimiter)};
-                if(!is_valid_hostname(hostname)) {
-                    throw std::invalid_argument("Hostname is malformed");
-                }
-
-
+                validate_hostname(host);
             }
 
-            if(delimiter == std::string::npos) return; // Host header only contains valid hostname, report valid host header (containing only hostname)
+            if(delimiter == std::string::npos) return;                            // host_authority only contains valid hostname
             else                               port = host.substr(delimiter + 1); // Get port as host substring
         }
 
@@ -325,7 +326,7 @@ RequestFraming validate_request_headers(
     auto check_duplicate = [&](HeaderType header) {
         auto idx = to_int(header);
         if(visited_headers.test(idx)) {
-            throw std::runtime_error("Cannot contain duplicate " + header_to_string(header) + " header");
+            throw std::invalid_argument("Cannot contain duplicate " + header_to_string(header) + " header");
         }
         visited_headers.set(idx);
     };
@@ -354,6 +355,10 @@ RequestFraming validate_request_headers(
                 // Do not check for duplicates for all other headers
                 // since enters this case more than once
             }
+        }
+
+        if(!visited_headers.test(to_int(HeaderType::Host))) {
+            throw std::invalid_argument("HTTP Request header requires at least one \"Host\" header");
         }
     }
 

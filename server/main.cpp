@@ -153,23 +153,30 @@ int main() {
                             std::cout << ("Output: " + r.method + ' ' + r.target + ' ' + r.version) << '\n'; 
                         } catch(const std::exception& error) {
                             std::cerr << "Encountered an error when parsing request line: " << error.what() << '\n';
+                            break; // Reject connection and move onto receiving next incoming request
                         }
 
                         //// PARSE REMAINING HTTP HEADERS ////
                         
                         try {
                             if(header_end > request_line_end) {
-                                const auto headers_start = request_line_end + 2;
+                                const auto headers_start = request_line_end + 2; // +2 to pass carriage return + line feed  
                                 std::string headers_data{incoming.substr(headers_start, header_end - headers_start)};
                                 auto header_lines = std::views::split(headers_data, std::string_view{"\r\n"});
 
                                 for(const auto& h : header_lines) {
                                     const std::string_view header{std::string_view(h.begin(), h.end())};
+
+                                    // collect header lines into a vector constructed
+                                    // as a Header object
                                     headers.push_back(parse_header_line(header));
                                 }
                             } else {
                                 throw std::invalid_argument("Invalid HTTP header: header cannot be empty");
                             }
+
+                            // Validate all collected headers and extract header values
+                            const auto request_framing = validate_request_headers(headers);
 
                         } catch(const std::exception& error) {
                             std::cerr << "Encountered an error when parsing headers : " << error.what() << '\n';
