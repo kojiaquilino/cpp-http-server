@@ -229,8 +229,8 @@ namespace {
                 validate_hostname(host);
             }
 
-            if(delimiter == std::string::npos) return;                            // host_authority only contains valid hostname
-            else                               port = host.substr(delimiter + 1); // Get port as host substring
+            if(delimiter == std::string::npos) return;                                      // host_authority only contains valid hostname
+            else                               port = host_authority.substr(delimiter + 1); // Get port as host substring
         }
 
         // Attempts to parse an address port,
@@ -356,10 +356,10 @@ RequestFraming validate_request_headers(
                 // since enters this case more than once
             }
         }
+    }
 
-        if(!visited_headers.test(to_int(HeaderType::Host))) {
-            throw std::invalid_argument("HTTP Request header requires at least one \"Host\" header");
-        }
+    if(!visited_headers.test(to_int(HeaderType::Host))) {
+        throw std::invalid_argument("HTTP Request header requires at least one \"Host\" header");
     }
 
     return RequestFraming{
