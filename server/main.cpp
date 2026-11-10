@@ -314,23 +314,24 @@ namespace{
         std::string incoming_bytes;                                           // retain received bytes across multiple reads: used for constructing http headers
         const auto deadline = RequestClock::now() + std::chrono::seconds{10}; // Initialize response receive timeout (default=10 seconds)
         
-        // Continuously accumulate bytes from incoming HTTP request
-        while(true) {
 
-            // Update receive deadline for receiving bytes + parsing response
-            prepare_receive(connection, deadline);
-            
-            int received_bytes {
-                ::recv(
-                    connection.native_handle(), // Socket to receive data from
-                    buffer,                     // Destination buffer
-                    sizeof(buffer),             // Maximum number of bytes to receive
-                    0                           // Flags (0=default)
-                )
-            };
-   
-            if(received_bytes > 0) {
-                try {
+        try {
+            // Continuously accumulate bytes from incoming HTTP request
+            while(true) {
+
+                // Update receive deadline for receiving bytes + parsing response
+                prepare_receive(connection, deadline);
+                
+                int received_bytes {
+                    ::recv(
+                        connection.native_handle(), // Socket to receive data from
+                        buffer,                     // Destination buffer
+                        sizeof(buffer),             // Maximum number of bytes to receive
+                        0                           // Flags (0=default)
+                    )
+                };
+    
+                if(received_bytes > 0) {
                     check_request_deadline(deadline);
 
                     // Construct HTTP request and search for header terminator "\r\n\r\n"
@@ -394,22 +395,21 @@ namespace{
                         std::cerr << "Rejected connection: HTTP headers exceed byte limit.\n";
                         break;
                     }
-                } catch(const std::exception& error) {
-                    std::cerr << "Encountered an error when parsing HTTP request: " << error.what() << '\n';
+                } 
+                
+                // Connection closed by client
+                else if(received_bytes == 0) {
                     break;
                 }
-            } 
-            
-            // Connection closed by client
-            else if(received_bytes == 0) {
-                break;
-            }
 
-            // SOCKET_ERROR: report error 
-            else {
-                std::cerr << "recv() failed with error code: " + std::to_string(WSAGetLastError()) << '\n';
-                break;
+                // SOCKET_ERROR: report error 
+                else {
+                    std::cerr << "recv() failed with error code: " + std::to_string(WSAGetLastError()) << '\n';
+                    break;
+                }
             }
+        } catch(const std::exception& error) {
+            std::cerr << "Rejected HTTP request: " << error.what() << '\n';
         }
 
         // Default return for all errors/invalid requests
