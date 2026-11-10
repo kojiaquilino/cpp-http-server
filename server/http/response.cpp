@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <format>
+#include <stdexcept>
 #include <string>
 
 std::string serialize_response(const Response& response) {

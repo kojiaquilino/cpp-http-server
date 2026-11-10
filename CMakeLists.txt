@@ -23,7 +23,7 @@ add_library(server_net
     server/net/socket.cpp
     server/http/request_line.cpp
     server/http/header.cpp
-    server/http/response.hpp
+    server/http/response.cpp
 )
 
 target_include_directories(server_net PUBLIC server)
