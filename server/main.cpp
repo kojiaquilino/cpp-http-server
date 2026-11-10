@@ -99,15 +99,6 @@ namespace{
             // Append current body bytes previously received with HTTP headers
             request_body = incoming_bytes.substr(body_start_idx, expected_body_bytes);
 
-            // Report success if entire body was contained within buffered response
-            if(request_body.size() == expected_body_bytes) {
-                std::cout << "Request body complete. Expected: "
-                        << expected_body_bytes
-                        << " bytes; received: "
-                        << request_body.size() << " bytes\n";
-                return true;
-            }
-
             // Receive bytes from HTTP request until received sufficient body bytes or encountered an error
             while(request_body.size() < expected_body_bytes) {
                 const auto remaining_bytes = expected_body_bytes - request_body.size();
@@ -124,17 +115,6 @@ namespace{
 
                 if(received_bytes > 0) {
                     request_body.append(buffer, static_cast<std::size_t>(received_bytes));
-
-                    // Report successful body completion.
-                    if(request_body.size() == expected_body_bytes) {
-                        std::cout << "Request body complete. Expected: "
-                                << expected_body_bytes
-                                << " bytes; received: "
-                                << request_body.size() << " bytes\n";
-                        return true; // Report success on receiving all body bytes
-                    }
-
-                    // Else, continue receiving more bytes from HTTP request
                 }
 
                 // Request did not send enough bytes to complete body
@@ -156,6 +136,15 @@ namespace{
                     return false;
                 }
             }
+
+            // Report successful body completion.
+            std::cout << "Request body complete. Expected: "
+                      << expected_body_bytes
+                      << " bytes; received: "
+                      << request_body.size() << " bytes\n";
+
+            return true; // Report success on receiving all body bytes
+    
         } catch(const std::exception& error) {
             std::cerr << "Encountered an error: " << error.what() << '\n';
             return false;
