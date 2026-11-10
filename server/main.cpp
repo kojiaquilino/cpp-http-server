@@ -228,20 +228,22 @@ int main() {
                                 else if (received == SOCKET_ERROR) {
                                     const int error = ::WSAGetLastError();
                                     std::cerr << "Rejected request: body receive failed "
-                                            << "(Winsock error " << error << ").\n";
-                                    break;
-                                }
-
-                                // Expected length == request_body's size:
-                                // Received enough bytes: complete without another recv()
-                                else if(request_body.size() == expected_body_bytes) {
-                                    std::cout << "Received sufficient body bytes. Total: " <<  request_body.size() << " bytes\n";
+                                              << "(Winsock error " << error << ").\n";
                                     break;
                                 }
 
                                 else {
                                     std::cerr << "Rejected request: an unknown error has occurred.\n";
                                     break; 
+                                }
+
+                                // Request did not send enough bytes to complete body:
+                                // Reject request with incomplete body
+                                if(request_body.size() == expected_body_bytes) {
+                                    std::cout << "Request body complete. Expected: "
+                                            << expected_body_bytes
+                                            << " bytes; received: "
+                                            << request_body.size() << " bytes\n";
                                 }
                             }
                         } catch (const std::exception& error) {
