@@ -99,6 +99,15 @@ namespace{
             // Append current body bytes previously received with HTTP headers
             request_body = incoming_bytes.substr(body_start_idx, expected_body_bytes);
 
+            // Report success if entire body was contained within buffered response
+            if(request_body.size() == expected_body_bytes) {
+                std::cout << "Request body complete. Expected: "
+                        << expected_body_bytes
+                        << " bytes; received: "
+                        << request_body.size() << " bytes\n";
+                return true;
+            }
+
             // Receive bytes from HTTP request until received sufficient body bytes or encountered an error
             while(request_body.size() < expected_body_bytes) {
                 const auto remaining_bytes = expected_body_bytes - request_body.size();
@@ -288,25 +297,30 @@ namespace{
 
                     // Parse and populate remaining HTTP request headers after request line
                     if(!parse_remaining_request_headers(headers, incoming_bytes, headers_end_idx, request_line_end_idx)) {
-                        break;; // Ends current receive_request() when failing to parse headers
+                        break; // Ends current receive_request() when failing to parse headers
                     }
 
                     // Validate populated headers and extract header values
                     // Currently retrieves Content-Length: number of body bytes to receive from HTTP request
-                    const auto request_framing = validate_request_headers(headers);
-                    const auto expected_body_bytes = request_framing.content_length.value_or(0); // content_bytes is optional
-                    const auto body_start_idx = headers_end_idx + 4; // +4 to pass CRLF control characters dividing header + body
-                    
-                    if(!parse_request_body(connection, incoming_bytes, buffer, body, expected_body_bytes, body_start_idx)) {
-                        break; // Ends current receive_request() when failing to populate request body
-                    }
+                    try {
+                        const auto request_framing = validate_request_headers(headers);
+                        const auto expected_body_bytes = request_framing.content_length.value_or(0); // content_bytes is optional
+                        const auto body_start_idx = headers_end_idx + 4; // +4 to pass CRLF control characters dividing header + body
+                        
+                        if(!parse_request_body(connection, incoming_bytes, buffer, body, expected_body_bytes, body_start_idx)) {
+                            break; // Ends current receive_request() when failing to populate request body
+                        }
 
-                    // Return successfully parsed request
-                    return Request{
-                        request_line,
-                        headers,
-                        body
-                    };
+                        // Return successfully parsed request
+                        return Request{
+                            request_line,
+                            headers,
+                            body
+                        };
+                    } catch(const std::exception& error) {
+                        std::cerr << "Encountered an error when validating HTTP request headers: " << error.what() << '\n';
+                        break;
+                    }
 
                 } else if(incoming_bytes.size() >= max_header_bytes) {
                     std::cerr << "Rejected connection: HTTP headers exceed byte limit.\n";
