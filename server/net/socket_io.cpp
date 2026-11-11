@@ -212,7 +212,9 @@ namespace {
     }
 }
 
-
+/// @brief Sends all response bytes to the client before the send deadline expires.
+/// @param connection The client socket to which the response is sent.
+/// @param bytes The response bytes to send.
 void send_response(const Socket& connection, std::string_view bytes) {
     std::size_t sent_bytes{0};
     const auto deadline = RequestClock::now() + std::chrono::seconds{10}; // Initialize response send timeout (default=10 seconds)
