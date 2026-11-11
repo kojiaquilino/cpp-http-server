@@ -1,5 +1,6 @@
 #define NOMINMAX
 
+#include "http/response.hpp"
 #include "net/network.hpp"
 #include "net/socket.hpp"
 #include "net/socket_io.hpp"
@@ -24,7 +25,6 @@ int main() {
         // Receive and accept incoming connections
         // Currently closes accepted socket after receiving one request
         while(true) {
-
             // Block until accepting new incoming connection
             Socket connection{accept_incoming_connection(listener_socket)};
 
@@ -33,6 +33,21 @@ int main() {
 
             if(!parsed_request.has_value()) {
                 std::cerr << "Failed to complete latest HTTP request.\n";
+                continue;
+            }
+
+            try {
+                const Response response{
+                    200,
+                    "OK",
+                    "text/plain",
+                    "Hello"
+                };
+
+                const auto bytes = serialize_response(response);
+                send_response(connection, bytes);
+            } catch(const std::exception& error) {
+                std::cerr << "Response send failed: " << error.what() << '\n';
             }
         }
 
