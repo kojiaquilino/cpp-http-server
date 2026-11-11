@@ -2,7 +2,10 @@
 
 #include "net/socket.hpp"
 
+#include <chrono>
 #include <string>
+
+using RequestClock = std::chrono::steady_clock;
 
 constexpr DWORD default_timeout_ms{10000};
 

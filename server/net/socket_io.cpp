@@ -213,21 +213,49 @@ namespace {
 }
 
 
-// void send_response(const Socket& connection, std::string_view bytes) {
-//     std::size_t sent_bytes{0};
-//     const auto deadline = RequestClock::now() + std::chrono::seconds{10}; // Initialize response send timeout (default=10 seconds)
+void send_response(const Socket& connection, std::string_view bytes) {
+    std::size_t sent_bytes{0};
+    const auto deadline = RequestClock::now() + std::chrono::seconds{10}; // Initialize response send timeout (default=10 seconds)
 
-//     while(sent_bytes < bytes.size()) {
-//         const auto remaining = bytes.size() - sent_bytes;
+    while(sent_bytes < bytes.size()) {
+        const auto remaining = bytes.size() - sent_bytes;                               // Number of bytes remaining to send
+        const auto chunk_size = static_cast<int>(std::min(remaining, max_chunk_bytes)); // Max number of bytes to send in next chunk (max=65536 bytes)
+        const char* chunk_start = bytes.data() + sent_bytes;                            // Maintain pointer to start of data to send
+        
+        check_deadline(deadline, "Request rejected: send deadline expired");
+        configure_send(connection, deadline);
 
-//         const auto chunk_size = static_cast<int>(
-//             std::min(remaining, max_chunk_bytes)
-//         );
+        const int successful_bytes{
+            ::send(
+                connection.native_handle(),
+                chunk_start,
+                chunk_size,
+                0
+            )
+        };
 
-//         // Maintain pointer to start of data to send
-//         const char* chunk_start = bytes.data() + sent_bytes;
-//     }
-// }
+        // Handle result based on number of bytes successfully sent to client
+        if(successful_bytes > 0) {
+            sent_bytes += static_cast<int>(successful_bytes);
+        } else if(successful_bytes == 0) {
+            throw std::runtime_error("Socket send made no progress");
+        } else {
+            const int error{WSAGetLastError()};
+
+            // Interrupted/canceled function call (most likely by client)
+            if(error == WSAEINTR) {
+                continue;
+            }
+
+            throw std::runtime_error(
+                "Socket send failed: " + std::to_string(error)
+            );
+        }
+    }
+
+    // Check deadline once more after final send: reject if deadline elapsed
+    check_deadline(deadline, "Request rejected: send deadline expired");
+}
 
 
 /// @brief Receives and parses one HTTP request from the client connection.

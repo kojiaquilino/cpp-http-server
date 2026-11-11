@@ -68,10 +68,7 @@ namespace {
 /// @param bind_ip The IPv4 address on which the listener should accept connections.
 /// @param bind_port The TCP port on which the listener should accept connections.
 /// @return A socket bound to the specified address and port.
-Socket create_and_bind_listener_socket_to(
-    std::string bind_ip="127.0.0.1",
-    int bind_port=8080
-) {
+Socket create_and_bind_listener_socket_to(std::string bind_ip, int bind_port) {
     // Create raw listener socket and store handle
     SOCKET raw_listener_handle{
         ::socket(
@@ -122,7 +119,7 @@ Socket create_and_bind_listener_socket_to(
 
 /// @brief Starts listening for incoming TCP connections on the specified socket.
 /// @param listener A bound socket to configure as a listening socket.
-void start_listener(Socket listener) {
+void start_listener(const Socket& listener) {
     // Start listening on address and port via listener socket
     check_socket_error(
         ::listen(
@@ -138,7 +135,7 @@ void start_listener(Socket listener) {
 /// @brief Accepts and configures the next incoming TCP connection.
 /// @param listener A listening socket that will accept the connection.
 /// @return A socket wrapping the accepted and configured client connection.
-Socket accept_incoming_connection(Socket listener) {
+Socket accept_incoming_connection(const Socket& listener) {
     // Block until accepting a new incoming connection.
     SOCKET accepted_handle{
         ::accept(
@@ -225,13 +222,13 @@ void configure_send(
             deadline - now
         );
 
-    // How long the next recv() can block while waiting for data
+    // How long the next send() can block while waiting for data
     const DWORD timeout_ms = static_cast<DWORD>(remaining.count());
-
+    
     if(::setsockopt(
         connection.native_handle(),
         SOL_SOCKET,
-        SO_RCVTIMEO,
+        SO_SNDTIMEO,
         reinterpret_cast<const char*>(&timeout_ms),
         sizeof(timeout_ms)
     ) == SOCKET_ERROR) {
