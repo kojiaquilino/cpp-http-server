@@ -25,5 +25,4 @@ struct RequestFraming {
 };
 
 Header parse_header_line(std::string_view line);
-
 RequestFraming validate_request_headers(const std::vector<Header>& headers);

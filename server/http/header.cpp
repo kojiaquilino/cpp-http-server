@@ -139,7 +139,7 @@ namespace {
         ) == 1;
     }
 
-
+    // Validate address port
     std::uint16_t parse_address_port(std::string_view value) {
         if(std::any_of(
             value.begin(),
@@ -267,6 +267,9 @@ namespace {
     }
 }
 
+/// @brief Parses, validates, and sanitizes a single HTTP header line.
+/// @param line Header line containing a name, colon separator, and value.
+/// @return The parsed header with a lowercase name and trimmed value.
 Header parse_header_line(std::string_view line) {
     std::size_t split{line.find(':')};
     
@@ -301,7 +304,7 @@ Header parse_header_line(std::string_view line) {
 
     //// Validating Header value ////
 
-    trim(value); // Trims in-place
+    HTTPUtils::trim(value); // Trims in-place
 
     // Check if contains illegal char
     if(has_invalid_header_value_char(value)) {
@@ -315,6 +318,9 @@ Header parse_header_line(std::string_view line) {
     };
 }
 
+/// @brief Validates request headers and determines the request framing mode.
+/// @param headers Headers to validate for duplicates and request-framing rules.
+/// @return The framing mode implied by the validated request headers.
 RequestFraming validate_request_headers(
     const std::vector<Header>& headers
 ) {
@@ -324,9 +330,9 @@ RequestFraming validate_request_headers(
     std::optional<std::size_t> content_length;
 
     auto check_duplicate = [&](HeaderType header) {
-        auto idx = to_int(header);
+        auto idx = HTTPUtils::to_int(header);
         if(visited_headers.test(idx)) {
-            throw std::invalid_argument("Cannot contain duplicate " + header_to_string(header) + " header");
+            throw std::invalid_argument("Cannot contain duplicate " + HTTPUtils::header_to_string(header) + " header");
         }
         visited_headers.set(idx);
     };
@@ -335,7 +341,7 @@ RequestFraming validate_request_headers(
     for(const auto& [name, value] : headers) {
 
         // Preserve header name, but retrieve enum type
-        HeaderType type{classify_header(name)};
+        HeaderType type{HTTPUtils::classify_header(name)};
 
         switch(type) {
             case HeaderType::Host: {
@@ -358,7 +364,7 @@ RequestFraming validate_request_headers(
         }
     }
 
-    if(!visited_headers.test(to_int(HeaderType::Host))) {
+    if(!visited_headers.test(HTTPUtils::to_int(HeaderType::Host))) {
         throw std::invalid_argument("HTTP Request header requires at least one \"Host\" header");
     }
 
