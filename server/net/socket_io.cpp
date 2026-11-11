@@ -6,6 +6,7 @@
 #include "net/socket.hpp"
 #include "net/socket_io.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <iostream>
 #include <optional>
