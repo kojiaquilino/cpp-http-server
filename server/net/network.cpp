@@ -233,7 +233,7 @@ void configure_send(
         sizeof(timeout_ms)
     ) == SOCKET_ERROR) {
         throw std::runtime_error(
-            "Request rejected: failed to configure receive timeout"
+            "Request rejected: failed to configure send timeout"
         );
     }
 }
