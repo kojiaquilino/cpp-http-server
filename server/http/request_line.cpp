@@ -36,7 +36,6 @@ namespace {
     }
 }
 
-
 RequestLine parse_request_line(std::string_view line) {
 
     // Reject request lines exceeding 4KiB limit

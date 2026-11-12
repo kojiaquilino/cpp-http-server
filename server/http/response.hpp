@@ -2,6 +2,7 @@
 
 #include <string>
 
+// Response struct constructed by HTTP server to send to client
 struct Response {
     int status_code;            // Result of request
     std::string reason_phrase;  // Accompanying description of status

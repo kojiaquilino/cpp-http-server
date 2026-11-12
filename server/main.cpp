@@ -1,5 +1,3 @@
-#define NOMINMAX
-
 #include "http/response.hpp"
 #include "net/network.hpp"
 #include "net/socket.hpp"

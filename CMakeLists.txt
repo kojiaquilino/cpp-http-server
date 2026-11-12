@@ -21,6 +21,7 @@ target_link_libraries(media_demo PRIVATE media_io)
 add_library(server_net
     server/http/header.cpp
     server/http/response.cpp
+    server/http/request.cpp
     server/http/request_line.cpp
     server/net/network.cpp
     server/net/socket.cpp
