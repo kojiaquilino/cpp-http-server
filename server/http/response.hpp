@@ -1,11 +1,15 @@
 #pragma once
 
 #include "http/error.hpp"
+#include "http/header.hpp"
+#include "http/request.hpp"
 
 #include <string>
+#include <vector>
 
 // Response struct constructed by HTTP server to send to client
 // Represents the HTTP response data constructed by the server for a client.
+
 struct Response {
     int status_code;                     // Result of request
     std::string reason_phrase;           // Accompanying description of status
@@ -30,13 +34,26 @@ struct Response {
           body{body},
           extra_headers{extra_headers} {}
 
-    // Constructor for error responses
+    // Constructor for error responses + allowed methods
     Response(RequestError error, std::vector<std::string> allowed_methods = {})
         : status_code{error.status_code},
           reason_phrase{error.reason_phrase},
           content_type{"text/plain"},
-          body{error.message},
-          extra_headers{} {allowed_methods}
+          body{error.message}
+        {
+            std::string methods{};
+
+            // Construct string containing allowed methods in sequential order
+            for(const auto& method : allowed_methods) {
+                methods.append(method + ", ");
+            }
+
+            // Remove last ", "
+            methods.erase(methods.size() > 2 ? methods.size() - 2 : 0);
+            if(!methods.empty()) {
+                extra_headers.emplace_back("Allow", methods);
+            }
+        }
 };
 
 // Serializes an HTTP response into a string suitable for transmission to a client.
