@@ -4,7 +4,7 @@
 #include "http/response.hpp"
 #include "net/socket.hpp"
 #include "net/socket_io.hpp"
-#include "net/winsock_runtime.hpp"
+#include "net/network_runtime.hpp"
 
 #include <iostream>
 #include <optional>
@@ -13,9 +13,12 @@
 int main() {
     try {
         // Start windows socket library
-        WinsockRuntime runtime;
-        Router router;
+#ifdef _WIN32
+        NetworkRuntime runtime;
         std::cout << "Winsock initialized.\n";
+#endif
+        // Create HTTP router
+        Router router;
 
         // Create listener socket
         Socket listener_socket{
@@ -36,6 +39,25 @@ int main() {
         while(true) {
             // Block until accepting new incoming connection
             Socket connection{accept_incoming_connection(listener_socket)};
+
+#ifdef __APPLE__
+            // Prevent SIGPIPE when sending data to a closed socket.
+            // Would otherwise terminate server on macOS
+            const int enabled{1};
+
+            // Suppress SIGPIPE when sending to a disconnected client
+            check_socket_error(
+                ::setsockopt(
+                    connection.native_handle(),
+                    SOL_SOCKET,
+                    SO_NOSIGPIPE,
+                    &enabled,
+                    static_cast<socklen_t>(sizeof(enabled))
+                ),
+                "setsockopt(SO_NOSIGPIPE)"
+            );
+#endif
+
 
             // Blocks until receiving an HTTP request on the connected socket
             RequestData request_result{receive_request(connection)};

@@ -7,7 +7,7 @@
 
 using RequestClock = std::chrono::steady_clock;
 
-constexpr DWORD default_timeout_ms{10000};
+inline constexpr std::chrono::milliseconds default_timeout{10000};
 
 // Creates a socket, binds it to the specified address, and returns it.
 Socket create_and_bind_listener_socket_to(std::string bind_ip="127.0.0.1", int bind_port=8080);

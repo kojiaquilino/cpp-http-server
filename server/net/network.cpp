@@ -1,29 +1,99 @@
 #include "http/error.hpp"
 #include "net/network.hpp"
+#include "net/platform.hpp"
 #include "net/socket.hpp"
 
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <cerrno>
+
+#ifdef _WIN32
 #include <winsock2.h>
-#include <ws2tcpip.h> // Address conversion functions
+#include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#endif
 
 using RequestClock = std::chrono::steady_clock;
 
 namespace {
+
+    // Calls platform-specific socket error function
+    int last_socket_error() noexcept {
+#ifdef _WIN32
+        return WSAGetLastError();
+#else
+        return errno;
+#endif
+    }
+
     // Checks if a network operation returned a socket error or not.
     // Throws a std::runtime_error if it did return a socket error
-    void check_socket_error(int result, std::string method) {
-        if(result == SOCKET_ERROR) {
-            const int error{WSAGetLastError()};
-            throw std::runtime_error(method + "() failed with error code: " + std::to_string(error));
+    void check_socket_error(int result, const std::string& operation) {
+        if(result == -1) {
+            const int error{last_socket_error()};
+
+            throw SocketError{
+                operation + "() failed with error code: " + std::to_string(error)
+            };
         }
     }
 
+    // Configures socket operation timeout
+    // Changes based on platform
+    void set_socket_timeout(
+        const Socket& connection,
+        int option,
+        std::chrono::milliseconds remaining
+    ) {
+#ifdef _WIN32
+        const DWORD timeout{
+            static_cast<DWORD>(remaining.count())
+        };
+
+        const int result{
+            ::setsockopt(
+                connection.native_handle(),                 // Socket to modify
+                SOL_SOCKET,                                 // Specify option belonging to socket layer
+                option,                                     // Set option's timeout
+                reinterpret_cast<const char*>(&timeout),    // Timeout value: default=10000ms (address of value)
+                static_cast<int>(sizeof(timeout))           // Size of option value (in this case, timeout)
+            )
+        };
+#else
+        timeval timeout{};
+        timeout.tv_sec =
+            static_cast<decltype(timeout.tv_sec)>(
+                remaining.count() / 1000
+            );
+        timeout.tv_usec =
+            static_cast<decltype(timeout.tv_usec)>(
+                (remaining.count() % 1000) * 1000
+            );
+
+        const int result{
+            ::setsockopt(
+                connection.native_handle(),             // Socket to modify
+                SOL_SOCKET,                             // Specify option belonging to socket layer
+                option,                                 // Set option's timeout
+                &timeout,                               // Timeout value: default=10000ms (address of value)
+                static_cast<socklen_t>(sizeof(timeout)) // Size of option value (in this case, timeout)
+            )
+        };
+#endif
+        check_socket_error(result, "setsockopt");
+    }
+
+
+
     // Configures an accepted incoming connection with corresponding 
     // timeouts for send and receive socket operations.
-    Socket configure_new_connection(const SOCKET& accepted_handle) {
+    Socket configure_new_connection(const net::NativeSocket& accepted_handle) {
 
         if(accepted_handle == INVALID_SOCKET) {
             throw std::runtime_error(
@@ -33,31 +103,8 @@ namespace {
 
         // Wrap accepted handle
         Socket connection{accepted_handle};
-
-        // Configure options on new socket: blocking ::recv() times out in 10 seconds
-        check_socket_error(
-            ::setsockopt(
-                accepted_handle,                                    // Socket to modify
-                SOL_SOCKET,                                         // Specify option belonging to socket layer
-                SO_RCVTIMEO,                                        // Set receive timeout
-                reinterpret_cast<const char*>(&default_timeout_ms), // Timeout value: default=10000ms (address of value)
-                static_cast<int>(sizeof(default_timeout_ms))        // Size of option value (in this case, timeout)
-            ),
-            "setsockopt_recv"
-        );
-
-        // Configure options on new socket: blocking ::send() times out in 10 seconds
-        check_socket_error(
-            ::setsockopt(
-                accepted_handle,                                    // Socket to modify
-                SOL_SOCKET,                                         // Specify option belonging to socket layer
-                SO_SNDTIMEO,                                        // Set send timeout
-                reinterpret_cast<const char*>(&default_timeout_ms), // Timeout value: default=10000ms (address of value)
-                static_cast<int>(sizeof(default_timeout_ms))        // Size of option value (in this case, timeout)
-            ),
-            "setsockopt_send"
-        );
-
+        set_socket_timeout(connection, SO_RCVTIMEO, default_timeout); // configure recv()'s timeout
+        set_socket_timeout(connection, SO_SNDTIMEO, default_timeout); // configure send()'s timeout
         return connection;
     }
 }
@@ -65,7 +112,7 @@ namespace {
 
 Socket create_and_bind_listener_socket_to(std::string bind_ip, int bind_port) {
     // Create raw listener socket and store handle
-    SOCKET raw_listener_handle{
+    net::NativeSocket raw_listener_handle{
         ::socket(
             AF_INET,
             SOCK_STREAM,
@@ -73,8 +120,8 @@ Socket create_and_bind_listener_socket_to(std::string bind_ip, int bind_port) {
         )
     };
 
-    if(raw_listener_handle == INVALID_SOCKET) {
-        throw std::runtime_error("socket() failed with error code: " + std::to_string(WSAGetLastError()));
+    if(raw_listener_handle == net::invalid_socket) {
+        throw std::runtime_error("socket() failed with error code: " + std::to_string(last_socket_error()));
     }
 
     // Create listener socket wrapper
@@ -83,19 +130,33 @@ Socket create_and_bind_listener_socket_to(std::string bind_ip, int bind_port) {
     address.sin_family = AF_INET;        // Specify IPv4 address
     address.sin_port = htons(bind_port); // Set port and convert host integer byte order to network byte order (match endianness)
     
-    // converts address to binary representation
-    int bind_address{
-        InetPtonA(
+// Converts address to binary representation (conversion is platform-specific)
+// Used for validating address to bind socket to
+#ifdef _WIN32
+    const int converted_bind_address{
+        ::InetPtonA(
             AF_INET,            // Address family: IPv4
             bind_ip.c_str(),    // IP address to bind listener socket to (to listen on)
             &address.sin_addr   // Output buffer for binary address
         )
     };
+#else
+    const int converted_bind_address{
+        ::inet_pton(
+            AF_INET,            // Address family: IPv4
+            bind_ip.c_str(),    // IP address to bind listener socket to (to listen on)
+            &address.sin_add    // Output buffer for binary address
+        )
+    };
+#endif
+    if(converted_bind_address != 1) {
+        throw std::invalid_argument{"Invalid IPv4 bind address."};
+    }
 
     // Check for address conversion success
-    if(bind_address != 1) {
+    if(converted_bind_address != 1) {
         throw std::runtime_error("InetPtonA() failed to convert to binary IPv4 format, "
-            "returning code: " + std::to_string(bind_address));
+            "returning code: " + std::to_string(converted_bind_address));
     }
 
     // Bind socket to local ip address and port
@@ -127,7 +188,7 @@ void start_listener(const Socket& listener) {
 
 Socket accept_incoming_connection(const Socket& listener) {
     // Block until accepting a new incoming connection.
-    SOCKET accepted_handle{
+    net::NativeSocket accepted_handle{
         ::accept(
             listener.native_handle(), // listening socket
             nullptr,                  // client_address

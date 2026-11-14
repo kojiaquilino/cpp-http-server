@@ -1,27 +1,31 @@
 #include "socket.hpp"
+#include "net/platform.hpp"
 
-#include <winsock2.h>
 #include <utility>
 
-Socket::Socket(SOCKET handle) noexcept
+Socket::Socket(net::NativeSocket handle) noexcept
     : handle_{handle} {};
     
 Socket::~Socket() noexcept {
     if(valid()) {
-        closesocket(handle_);
+#ifdef _WIN32
+        ::closesocket(handle_);
+#else
+        ::close(handle_);
+#endif
     }
 }
 
-SOCKET Socket::native_handle() const noexcept {
+net::NativeSocket Socket::native_handle() const noexcept {
     return handle_;
 }
 
 bool Socket::valid() const noexcept {
-    return handle_ != INVALID_SOCKET;
+    return handle_ != net::invalid_socket;
 }
 
 Socket::Socket(Socket&& other) noexcept {
-    handle_ = std::exchange(other.handle_, INVALID_SOCKET);
+    handle_ = std::exchange(other.handle_, net::invalid_socket);
 }
 
 Socket& Socket::operator=(Socket&& other) noexcept {
@@ -33,7 +37,7 @@ Socket& Socket::operator=(Socket&& other) noexcept {
         }
 
         // Move other handle to current socket object, and invalidate other handle
-        handle_ = std::exchange(other.handle_, INVALID_SOCKET);
+        handle_ = std::exchange(other.handle_, net::invalid_socket);
     }
     return *this;
 }
