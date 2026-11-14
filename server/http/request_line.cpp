@@ -8,7 +8,6 @@
 
 namespace {
     // Max size of a request line (-2 to reflect 2 bytes for CRLF control chars)
-    constexpr int max_request_line_bytes{4096 - 2};
     const std::vector<std::string> allowed_methods{"GET", "POST"};
 
     // Validates method field of request line

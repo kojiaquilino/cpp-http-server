@@ -5,6 +5,10 @@
 #include <string_view>
 #include <vector>
 
+
+constexpr std::size_t max_body_bytes{12 * 1024 * 1024}; // Byte limit for Content-Length
+constexpr std::size_t header_count{5};                  // Number of available options for HeaderType
+
 enum class HeaderType {
     Host,
     ContentLength,
@@ -12,9 +16,6 @@ enum class HeaderType {
     Expect,
     Other
 };
-
-// Number of available options for HeaderType
-inline constexpr std::size_t header_count{4};
 
 // Represents an HTTP header as a name-value pair.
 struct Header {

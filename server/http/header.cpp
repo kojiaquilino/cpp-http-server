@@ -13,9 +13,6 @@
 #include <vector>
 
 namespace {
-    // Byte limit for Content-Length
-    constexpr std::size_t max_body_bytes{12 * 1024 * 1024};
-
     // Validates header name field of request line
     bool has_invalid_header_name_char(std::string_view header_name) {  
 
@@ -157,7 +154,7 @@ namespace {
 
         // Ensure all characters were consumed in conversion (e.g. ptr at end of string)
         if(ec != std::errc() || ptr != value.data() + value.size()) {
-            throw std::invalid_argument("Port number must be a valid number");
+            throw http_errors::bad_request("Port number must be a valid number");
         }
 
         // Valid ports are 0 - 65535
@@ -347,6 +344,10 @@ RequestFraming validate_request_headers(
                 continue;
             }
             case HeaderType::ContentLength: {
+                if(visited_headers.test(HTTPUtils::to_int(HeaderType::TransferEncoding))) {
+                    throw http_errors::bad_request("Transfer-Encoding and Content-Length must not appear together.");
+                }
+
                 content_length = parse_content_length(value);
                 check_duplicate(type);
                 continue;

@@ -3,6 +3,9 @@
 #include <string>
 #include <string_view>
 
+// 4096 minus 2 control characters CR + LF
+constexpr std::size_t max_request_line_bytes{4094};
+
 // Represents the method, request target, and HTTP version from a request line.
 struct RequestLine {
     std::string method;

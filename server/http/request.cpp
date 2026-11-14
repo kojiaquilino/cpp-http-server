@@ -3,6 +3,7 @@
 #include "http/error.hpp"
 #include "http/header.hpp"
 #include "http/request.hpp"
+#include "http/request_line.hpp"
 #include "net/network.hpp"
 #include "net/socket.hpp"
 #include "net/socket_io.hpp"

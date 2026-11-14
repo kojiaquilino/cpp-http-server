@@ -106,6 +106,31 @@ RequestData receive_request(const Socket& connection) noexcept {
             if(received_bytes > 0) {
                 check_deadline(deadline, "Request rejected: receive deadline expired.");
 
+                // Check early if request line is too long, in order to potentially return
+                // status code 414: URI Too Long early rather than waiting for 431
+                const auto request_line_end = incoming_bytes.find("\r\n");
+
+                if(request_line_end != std::string::npos) {
+                    if(request_line_end > max_request_line_bytes) {
+                        throw http_errors::uri_too_long(
+                            "HTTP request line exceeds limit."
+                        );
+                    }
+                    
+                } else {
+                    // A trailing '\r' might begin a delimiter completed by the next read: 
+                    // do not count against budget
+                    const auto minimum_line_length =
+                        incoming_bytes.size()
+                        - (!incoming_bytes.empty() && incoming_bytes.back() == '\r' ? 1 : 0);
+
+                    if(minimum_line_length > max_request_line_bytes) {
+                        throw http_errors::uri_too_long(
+                            "HTTP request line exceeds limit."
+                        );
+                    }
+                }
+
                 // Construct HTTP request and search for header terminator "\r\n\r\n"
                 incoming_bytes.append(buffer, static_cast<std::size_t>(received_bytes));
                 const auto headers_end_idx = incoming_bytes.find("\r\n\r\n");
@@ -129,7 +154,13 @@ RequestData receive_request(const Socket& connection) noexcept {
             
             // Connection closed by client
             else if(received_bytes == 0) {
-                break;
+                if(!incoming_bytes.empty()) {
+                    throw http_errors::bad_request(
+                        "Client stopped sending before HTTP headers were complete."
+                    );
+                }
+
+                break; // No request bytes received; close without responding.
             }
 
             // SOCKET_ERROR: report error 

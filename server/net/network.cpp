@@ -1,3 +1,4 @@
+#include "http/error.hpp"
 #include "net/network.hpp"
 #include "net/socket.hpp"
 
@@ -154,7 +155,7 @@ void configure_receive(
 
     // Compare deadline with elapsed time, and reject if passed deadline
     if(now >= deadline) {
-        throw std::runtime_error(
+        throw http_errors::request_timeout(
             "Request rejected: receive deadline expired"
         );
     }
@@ -190,7 +191,7 @@ void configure_send(
 
     // Compare deadline with elapsed time, and reject if passed deadline
     if(now >= deadline) {
-        throw std::runtime_error(
+        throw http_errors::request_timeout(
             "Request rejected: receive deadline expired"
         );
     }
