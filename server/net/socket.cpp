@@ -1,6 +1,11 @@
 #include "socket.hpp"
 #include "net/platform.hpp"
 
+#ifndef _WIN32
+#include <unistd.h> // provides close() for POSIX sockets
+#endif
+
+#include <cstdint>
 #include <utility>
 
 Socket::Socket(net::NativeSocket handle) noexcept

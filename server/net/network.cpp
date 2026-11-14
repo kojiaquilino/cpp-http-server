@@ -165,7 +165,7 @@ Socket create_and_bind_listener_socket_to(std::string bind_ip, int bind_port) {
         ::inet_pton(
             AF_INET,            // Address family: IPv4
             bind_ip.c_str(),    // IP address to bind listener socket to (to listen on)
-            &address.sin_add    // Output buffer for binary address
+            &address.sin_addr   // Output buffer for binary address
         )
     };
 #endif
@@ -207,18 +207,32 @@ void start_listener(const Socket& listener) {
 }
 
 Socket accept_incoming_connection(const Socket& listener) {
-    // Block until accepting a new incoming connection.
-    net::NativeSocket accepted_handle{
-        ::accept(
-            listener.native_handle(), // listening socket
-            nullptr,                  // client_address
-            nullptr                   // address_length
-        )
-    };
+    while(true) {
+        // Block until accepting a new incoming connection.
+        const net::NativeSocket accepted_handle{
+            ::accept(listener.native_handle(), nullptr, nullptr)
+        };
 
-    // Ensure that the connection was successful and set its options.
-    Socket connection{configure_new_connection(accepted_handle)};
-    return connection;
+        if(accepted_handle != net::invalid_socket) {
+            return configure_new_connection(accepted_handle);
+        }
+
+        const int error{last_socket_error()};
+
+#ifdef _WIN32
+        const bool interrupted{error == WSAEINTR};
+#else
+        const bool interrupted{error == EINTR};
+#endif
+
+        if(interrupted) {
+            continue; // Retries accepting incoming connections on client interrupt
+        }
+
+        throw SocketError{
+            "accept() failed with error code: " + std::to_string(error)
+        };
+    }
 }
 
 void check_request_deadline(RequestClock::time_point deadline, std::string error_message) {
