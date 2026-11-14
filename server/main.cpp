@@ -87,14 +87,22 @@ int main() {
 
             try {
                 bytes = serialize_response(response); // Serialize response to return
-            } catch(const HTTPError& http_error) {
-                bytes = serialize_response({RequestError{http_error}}); // Serialize error returned instead to return
             } catch(const std::exception& error) {
-                std::cerr << "Response send failed: " << error.what() << '\n';
-                continue;
+                std::cerr << "Response serialization failed: " << error.what() << '\n';
+                bytes = serialize_response(Response{
+                    RequestError{
+                        http_errors::internal_server_error(
+                            "The server could not construct a valid response."
+                        )
+                    }
+                });
             }
 
-            send_response(connection, bytes);
+            try {
+                send_response(connection, bytes);
+            } catch(const std::exception& error) {
+                std::cerr << "Response send failed: " << error.what() << '\n';
+            }
         }
 
     } catch(const std::exception& error) {
