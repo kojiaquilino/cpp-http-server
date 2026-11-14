@@ -19,7 +19,18 @@ public:
     Response dispatch(const Request& request) const;
 
 private:
+    struct RouteKeyHash {
+        std::size_t operator()(
+            const std::pair<std::string, std::string>& key
+        ) const noexcept {
+            const auto method_hash = std::hash<std::string>{}(key.first);
+            const auto path_hash = std::hash<std::string>{}(key.second);
+
+            return method_hash ^ (path_hash << 1);
+        }
+    };
+
     // {method, path} -> handler function
-    std::unordered_map<std::pair<std::string, std::string>, Handler> routes_;
+    std::unordered_map<std::pair<std::string, std::string>, Handler, RouteKeyHash> routes_;
     std::unordered_map<std::string, std::vector<std::string>> allowed_methods_;
 };
