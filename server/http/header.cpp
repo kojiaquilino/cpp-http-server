@@ -358,6 +358,9 @@ RequestFraming validate_request_headers(
 
                 throw http_errors::not_implemented("Transfer-Encoding is unsupported.");
             }
+            case HeaderType::Expect: {
+                throw http_errors::expectation_failed("Expect is unsupported.");
+            }
             case HeaderType::Other: {
                 // Do not check for duplicates for all other headers
                 // since enters this case more than once

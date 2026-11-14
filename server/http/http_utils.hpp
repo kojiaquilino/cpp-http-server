@@ -1,7 +1,10 @@
 #pragma once
 
+#include "http/header.hpp"
+
 #include <algorithm>
 #include <string>
+#include <type_traits>
 
 namespace HTTPUtils {
     // Convert enum class values into underlying integer
@@ -12,10 +15,11 @@ namespace HTTPUtils {
 
     // header_name is lowercase by default
     constexpr HeaderType classify_header(std::string header_name) {
-        if(header_name == "host") return HeaderType::Host;
-        if(header_name == "content-length") return HeaderType::ContentLength;
-        if(header_name == "transfer-encoding") return HeaderType::TransferEncoding;
-        return HeaderType::Other; // default
+        if(header_name == "host")               return HeaderType::Host;
+        if(header_name == "content-length")     return HeaderType::ContentLength;
+        if(header_name == "transfer-encoding")  return HeaderType::TransferEncoding;
+        if(header_name == "expect")             return HeaderType::Expect;
+        return HeaderType::Other; // generic default header
     }
 
     // Convert enum to string
@@ -24,6 +28,7 @@ namespace HTTPUtils {
             case HeaderType::Host:              return "Host";
             case HeaderType::ContentLength:     return "Content-Length";
             case HeaderType::TransferEncoding:  return "Transfer-Encoding";
+            case HeaderType::Expect:            return "Expect";
         }
         return "Other";
     }

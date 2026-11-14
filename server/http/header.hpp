@@ -9,6 +9,7 @@ enum class HeaderType {
     Host,
     ContentLength,
     TransferEncoding,
+    Expect,
     Other
 };
 
