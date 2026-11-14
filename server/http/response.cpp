@@ -62,7 +62,7 @@ std::string serialize_response(const Response& response) {
             parsed_extra_headers.push_back(parsed_header);
             
         } catch(const HTTPError&) {
-            throw;
+            throw std::invalid_argument("Invalid response header."); // Headers created erroneously by application code
         }
     }
 
