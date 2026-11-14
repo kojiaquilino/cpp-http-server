@@ -46,8 +46,11 @@ namespace HTTPUtils {
             case Host:              return "Host";
             case ContentLength:     return "Content-Length";
             case TransferEncoding:  return "Transfer-Encoding";
+            case Allow:             return "Allow";
             case Expect:            return "Expect";
         }
+        
+        // default return
         return "Other";
     }
 

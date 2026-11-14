@@ -405,12 +405,6 @@ RequestFraming validate_request_headers(
         throw http_errors::bad_request("HTTP Request header requires at least one \"Host\" header");
     }
 
-    for (const auto& [name, value] : headers) {
-    std::cerr << "Parsed header: [" << name
-              << "] = [" << value << "]\n";
-}
-
-
     return RequestFraming{
         content_length
     };

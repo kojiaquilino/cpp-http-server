@@ -166,7 +166,7 @@ RequestData process_request(
     // Populate request line of HTTP request
     try {
         request_line = parse_request_line(incoming_bytes.substr(0, request_line_end_idx));
-        std::cout << ("Output: " + request_line.method + ' ' + request_line.target + ' ' + request_line.version) << '\n';
+        std::cout << request_line.method + ' ' + request_line.target + ' ' + request_line.version << '\n';
 
         // Parse and populate remaining HTTP request headers after request line
         parse_remaining_request_headers(
