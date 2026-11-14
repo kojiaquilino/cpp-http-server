@@ -41,11 +41,8 @@ std::string serialize_response(const Response& response) {
         )
     );
 
-    // Divide headers and body of response
-    serialized.append("\r\n");
-
-    // Append body bytes to response
-    serialized.append(body);
+    serialized.append("\r\n");  // Divide headers and body of response
+    serialized.append(body);    // Append body bytes to response
 
     return serialized;
 }

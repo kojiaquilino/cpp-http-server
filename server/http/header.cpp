@@ -344,20 +344,13 @@ RequestFraming validate_request_headers(
                 continue;
             }
             case HeaderType::ContentLength: {
-                if(visited_headers.test(HTTPUtils::to_int(HeaderType::TransferEncoding))) {
-                    throw http_errors::bad_request("Transfer-Encoding and Content-Length must not appear together.");
-                }
-
-                content_length = parse_content_length(value);
                 check_duplicate(type);
+                content_length = parse_content_length(value);
                 continue;
             }
             case HeaderType::TransferEncoding: {
-                if(visited_headers.test(HTTPUtils::to_int(HeaderType::ContentLength))) {
-                    throw http_errors::bad_request("Transfer-Encoding and Content-Length must not appear together.");
-                }
-
-                throw http_errors::not_implemented("Transfer-Encoding is unsupported.");
+                check_duplicate(type);
+                continue; // Rejected later after parsing all headers
             }
             case HeaderType::Expect: {
                 throw http_errors::expectation_failed("Expect is unsupported.");
@@ -367,6 +360,18 @@ RequestFraming validate_request_headers(
                 // since enters this case more than once
             }
         }
+    }
+
+    // If both Content-Length and Transfer-Encoding present in header, return bad request
+    if(visited_headers.test(HTTPUtils::to_int(HeaderType::ContentLength))
+    && visited_headers.test(HTTPUtils::to_int(HeaderType::TransferEncoding))) {
+        throw http_errors::bad_request("Transfer-Encoding and Content-Length must not appear together.");
+    }
+
+
+    // Throw Transfer-Encoding unimplemented error here
+    if(visited_headers.test(HTTPUtils::to_int(HeaderType::TransferEncoding))) {
+        throw http_errors::not_implemented("Transfer-Encoding is unsupported.");
     }
 
     if(!visited_headers.test(HTTPUtils::to_int(HeaderType::Host))) {

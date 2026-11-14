@@ -40,8 +40,8 @@ void parse_remaining_request_headers(
             const std::string_view current_header{h.begin(), h.end()};
             headers.push_back(parse_header_line(current_header));
         }
-    } catch(const HTTPError& http_error) {
-        throw http_error; // propagate error up to caller
+    } catch(const HTTPError&) {
+        throw; // propagate error up to caller
     } catch(const std::exception& error) { // Handle all other exceptions
         std::cerr << "Encountered an internal error when parsing headers: " << error.what() << '\n';
         throw http_errors::internal_server_error("Unexpected failure while parsing HTTP headers.");
@@ -145,8 +145,13 @@ RequestData process_request(
     // Populate request line of HTTP request
     try {
         request_line = parse_request_line(incoming_bytes.substr(0, request_line_end_idx));
+
+        // Check if the method provided in `request_line` is a supported method
+        if(std::find(supported_methods.begin(), supported_methods.end(), request_line.method) == supported_methods.end()) {
+            throw http_errors::not_implemented("This server supports only GET and POST.");
+        }
+
         std::cout << ("Output: " + request_line.method + ' ' + request_line.target + ' ' + request_line.version) << '\n';
-    
 
         // Parse and populate remaining HTTP request headers after request line
         parse_remaining_request_headers(
@@ -188,7 +193,7 @@ RequestData process_request(
         return RequestError{http_error};
     } catch(const std::exception& error) {
         std::cerr << "Encountered an unknown error when processing HTTP request: " << error.what() << '\n';
-        return RequestError{http_errors::unknown_error("Unknown server error when processing HTTP request")};
+        return RequestError{http_errors::internal_server_error("Unknown server error when processing HTTP request")};
     }
 }
 

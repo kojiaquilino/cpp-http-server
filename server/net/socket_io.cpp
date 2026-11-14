@@ -105,7 +105,8 @@ RequestData receive_request(const Socket& connection) noexcept {
 
             if(received_bytes > 0) {
                 check_deadline(deadline, "Request rejected: receive deadline expired.");
-
+                incoming_bytes.append(buffer, static_cast<std::size_t>(received_bytes));
+                
                 // Check early if request line is too long, in order to potentially return
                 // status code 414: URI Too Long early rather than waiting for 431
                 const auto request_line_end = incoming_bytes.find("\r\n");
@@ -131,8 +132,7 @@ RequestData receive_request(const Socket& connection) noexcept {
                     }
                 }
 
-                // Construct HTTP request and search for header terminator "\r\n\r\n"
-                incoming_bytes.append(buffer, static_cast<std::size_t>(received_bytes));
+                // Check for end of header section
                 const auto headers_end_idx = incoming_bytes.find("\r\n\r\n");
 
                 if(headers_end_idx != std::string::npos) {

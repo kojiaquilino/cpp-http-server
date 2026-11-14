@@ -7,8 +7,6 @@
 #include <vector>
 
 namespace {
-    // Max size of a request line (-2 to reflect 2 bytes for CRLF control chars)
-    const std::vector<std::string> allowed_methods{"GET", "POST"};
 
     // Validates method field of request line
     bool has_invalid_method_character(std::string_view method) {
@@ -69,8 +67,6 @@ RequestLine parse_request_line(std::string_view line) {
                 // Validate all characters in method
                 if(has_invalid_method_character(field)) {
                     throw http_errors::bad_request("Request line contains an invalid HTTP method.");
-                } else if(std::find(allowed_methods.begin(), allowed_methods.end(), field) == allowed_methods.end()) {
-                    throw http_errors::not_implemented("This server supports only GET and POST.");
                 }
 
                 r.method = field;

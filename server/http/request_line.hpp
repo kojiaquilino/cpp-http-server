@@ -2,9 +2,11 @@
 
 #include <string>
 #include <string_view>
+#include <vector>
 
 // 4096 minus 2 control characters CR + LF
 constexpr std::size_t max_request_line_bytes{4094};
+const std::vector<std::string> supported_methods{"GET", "POST"};
 
 // Represents the method, request target, and HTTP version from a request line.
 struct RequestLine {
