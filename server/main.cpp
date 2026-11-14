@@ -67,7 +67,7 @@ int main() {
 
             // If encountered fatal socket error: close connection
             if(close_socket) {
-                break;
+                continue;
             }
 
             try {

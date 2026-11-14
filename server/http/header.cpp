@@ -356,7 +356,7 @@ RequestFraming validate_request_headers(
                     throw http_errors::bad_request("Transfer-Encoding and Content-Length must not appear together.");
                 }
 
-                throw http_errors::not_implemented("Transfer-Encoding is unsupported");
+                throw http_errors::not_implemented("Transfer-Encoding is unsupported.");
             }
             case HeaderType::Other: {
                 // Do not check for duplicates for all other headers

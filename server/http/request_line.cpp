@@ -71,7 +71,7 @@ RequestLine parse_request_line(std::string_view line) {
                 // Validate all characters in method
                 if(has_invalid_method_character(field)) {
                     throw http_errors::bad_request("Request line contains an invalid HTTP method.");
-                } else if(std::find(allowed_methods.begin(), allowed_methods.end(), r.method) == allowed_methods.end()) {
+                } else if(std::find(allowed_methods.begin(), allowed_methods.end(), field) == allowed_methods.end()) {
                     throw http_errors::not_implemented("This server supports only GET and POST.");
                 }
 
