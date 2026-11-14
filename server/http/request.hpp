@@ -23,21 +23,21 @@ struct RequestError {
     std::string reason_phrase;
     std::string message;
 
+    // Manually constructing RequestError
+    RequestError(
+        int status_code,
+        std::string reason_phrase,
+        std::string message
+    )
+        : status_code{status_code},
+          reason_phrase{std::move(reason_phrase)},
+          message{std::move(message)} {}
+
     // Construct a RequestError from an HTTP error
     RequestError(HTTPError error)
         : status_code{error.status_code},
           reason_phrase{error.reason_phrase},
           message{error.what()} {}
-
-    // Manually constructing RequestError
-    RequestError(
-        int code,
-        std::string reason,
-        std::string description
-    )
-        : status_code{code},
-          reason_phrase{std::move(reason)},
-          message{std::move(description)} {}
 };
 
 

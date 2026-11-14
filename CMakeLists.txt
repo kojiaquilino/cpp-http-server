@@ -23,6 +23,7 @@ add_library(server_net
     server/http/response.cpp
     server/http/request.cpp
     server/http/request_line.cpp
+    server/http/router.cpp
     server/net/network.cpp
     server/net/socket.cpp
     server/net/socket_io.cpp

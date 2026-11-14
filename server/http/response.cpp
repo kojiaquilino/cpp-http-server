@@ -7,7 +7,7 @@
 
 std::string serialize_response(const Response& response) {
     std::string serialized{};
-    auto [status_code, reason_phrase, content_type, body] = response;
+    auto [status_code, reason_phrase, content_type, body, extra_headers] = response;
     const auto validate_content = [](const std::string& content) { // prevent control characters from corrupting response headers
         return std::all_of(
             content.begin(),
@@ -41,8 +41,14 @@ std::string serialize_response(const Response& response) {
         )
     );
 
-    serialized.append("\r\n");  // Divide headers and body of response
-    serialized.append(body);    // Append body bytes to response
+    // Adding extra headers to the serialized response
+    for(const auto& header : response.extra_headers) {
+        // Assuming Header has fields named name and value:
+        serialized += header.name + ": " + header.value + "\r\n";
+    }
+
+    serialized.append("\r\n");  // Separates headers and body
+    serialized.append(body);    // Append body to response
 
     return serialized;
 }

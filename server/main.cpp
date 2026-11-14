@@ -1,4 +1,5 @@
 #include "http/error.hpp"
+#include "http/router.hpp"
 #include "net/network.hpp"
 #include "http/response.hpp"
 #include "net/socket.hpp"
@@ -13,6 +14,7 @@ int main() {
     try {
         // Start windows socket library
         WinsockRuntime runtime;
+        Router router;
         std::cout << "Winsock initialized.\n";
 
         // Create listener socket
@@ -37,14 +39,10 @@ int main() {
                 using T = std::decay_t<decltype(value)>;
 
                 if constexpr(std::is_same_v<T, Request>) {
-                    response = {
-                        200,
-                        "OK",
-                        "text/plain",
-                        "Hello"
-                    };
+                    const auto request = static_cast<Request>(value);
+                    response = router.dispatch(request);
                 } else if constexpr(std::is_same_v<T, RequestError>) {
-                    auto request_error = static_cast<RequestError>(value);
+                    const auto request_error = static_cast<RequestError>(value);
                     
                     if(request_error.status_code == 0) {
                         std::cerr << "Encountered a fatal socket error: closing connection...\n";
@@ -52,12 +50,7 @@ int main() {
                         return;
                     }
 
-                    response = {
-                        request_error.status_code,
-                        request_error.reason_phrase,
-                        "text/plain",
-                        request_error.message
-                    };
+                    response = {request_error};
 
                 } else {
                     std::cerr << "Unable to process request_result: exiting program...\n";

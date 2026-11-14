@@ -15,5 +15,12 @@ struct RequestLine {
     std::string version;
 };
 
+namespace request_line {
+    // Validates method field of request line
+    bool has_invalid_method_character(std::string_view method);
+    // Validates target field of request line
+    bool has_invalid_target_character(std::string_view target);
+}
+
 // Parses an HTTP request line into its method, target, and version components.
 RequestLine parse_request_line(std::string_view line);

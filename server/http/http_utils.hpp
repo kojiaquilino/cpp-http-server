@@ -15,20 +15,22 @@ namespace HTTPUtils {
 
     // header_name is lowercase by default
     constexpr HeaderType classify_header(std::string header_name) {
-        if(header_name == "host")               return HeaderType::Host;
-        if(header_name == "content-length")     return HeaderType::ContentLength;
-        if(header_name == "transfer-encoding")  return HeaderType::TransferEncoding;
-        if(header_name == "expect")             return HeaderType::Expect;
+        using enum HeaderType;
+        if(header_name == "host")               return Host;
+        if(header_name == "content-length")     return ContentLength;
+        if(header_name == "transfer-encoding")  return TransferEncoding;
+        if(header_name == "expect")             return Expect;
         return HeaderType::Other; // generic default header
     }
 
     // Convert enum to string
     constexpr std::string header_to_string(HeaderType header) {
         switch(header) {
-            case HeaderType::Host:              return "Host";
-            case HeaderType::ContentLength:     return "Content-Length";
-            case HeaderType::TransferEncoding:  return "Transfer-Encoding";
-            case HeaderType::Expect:            return "Expect";
+            using enum HeaderType;
+            case Host:              return "Host";
+            case ContentLength:     return "Content-Length";
+            case TransferEncoding:  return "Transfer-Encoding";
+            case Expect:            return "Expect";
         }
         return "Other";
     }

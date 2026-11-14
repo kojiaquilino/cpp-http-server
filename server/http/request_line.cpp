@@ -4,34 +4,28 @@
 #include <algorithm>
 #include <ranges>
 #include <string_view>
-#include <vector>
 
-namespace {
+bool request_line::has_invalid_method_character(std::string_view method) {
+    return std::any_of(
+        method.begin(),
+        method.end(),
+        [](unsigned char c) {
+            return !(c >= 'A' && c <= 'Z')
+                && !(c >= 'a' && c <= 'z')
+                && !(c >= '0' && c <= '9')
+                && std::string_view{"!#$%&'*+-.^_`|~"}.find(c) == std::string_view::npos; // Use allowlist
+        }
+    );
+}
 
-    // Validates method field of request line
-    bool has_invalid_method_character(std::string_view method) {
-        return std::any_of(
-            method.begin(),
-            method.end(),
-            [](unsigned char c) {
-                return !(c >= 'A' && c <= 'Z')
-                    && !(c >= 'a' && c <= 'z')
-                    && !(c >= '0' && c <= '9')
-                    && std::string_view{"!#$%&'*+-.^_`|~"}.find(c) == std::string_view::npos; // Use allowlist
-            }
-        );
-    }
-
-    // Validates target field of request line
-    bool has_invalid_target_character(std::string_view target) {
-        return std::any_of(
-            target.begin(),
-            target.end(),
-            [](unsigned char c) {
-                return c <= 32 || c >= 127;
-            }
-        );
-    }
+bool request_line::has_invalid_target_character(std::string_view target) {
+    return std::any_of(
+        target.begin(),
+        target.end(),
+        [](unsigned char c) {
+            return c <= 32 || c >= 127;
+        }
+    );
 }
 
 RequestLine parse_request_line(std::string_view line) {
@@ -65,7 +59,7 @@ RequestLine parse_request_line(std::string_view line) {
         switch(index) {
             case 0: { // HTTP Method
                 // Validate all characters in method
-                if(has_invalid_method_character(field)) {
+                if(request_line::has_invalid_method_character(field)) {
                     throw http_errors::bad_request("Request line contains an invalid HTTP method.");
                 }
 
@@ -79,7 +73,7 @@ RequestLine parse_request_line(std::string_view line) {
                 }
 
                 // Validate all characters in target/path
-                if(has_invalid_target_character(field)) {
+                if(request_line::has_invalid_target_character(field)) {
                     throw http_errors::bad_request("Request line contains an invalid HTTP target.");
                 }
 
