@@ -3,21 +3,22 @@
 #include "net/platform.hpp"
 #include "net/socket.hpp"
 
+#ifdef _WIN32
+#include <winsock2.h> // Windows Sockets API
+#include <ws2tcpip.h> // Windows TCP/IP address and name-resolution helpers
+#else
+#include <arpa/inet.h>  // IP address conversion functions
+#include <netinet/in.h> // Internet address structures and constants
+#include <sys/socket.h> // POSIX socket API
+#include <sys/time.h>   // timeval and time-related socket types
+#include <cerrno>       // errno error variable and error codes
+#endif
+
+
 #include <chrono>
 #include <iostream>
 #include <stdexcept>
 #include <string>
-#include <cerrno>
-
-#ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#else
-#include <arpa/inet.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#endif
 
 using RequestClock = std::chrono::steady_clock;
 
@@ -95,14 +96,33 @@ namespace {
     // timeouts for send and receive socket operations.
     Socket configure_new_connection(const net::NativeSocket& accepted_handle) {
 
-        if(accepted_handle == INVALID_SOCKET) {
+        if(accepted_handle == net::invalid_socket) {
             throw std::runtime_error(
-                "accept() failed with error code: " + std::to_string(WSAGetLastError())
+                "accept() failed with error code: " + std::to_string(last_socket_error())
             );
         }
 
         // Wrap accepted handle
         Socket connection{accepted_handle};
+
+#ifdef __APPLE__
+        // Prevent SIGPIPE when sending data to a closed socket.
+        // Would otherwise terminate server on macOS
+        const int enabled{1};
+
+        // Suppress SIGPIPE when sending to a disconnected client
+        check_socket_error(
+            ::setsockopt(
+                connection.native_handle(),
+                SOL_SOCKET,
+                SO_NOSIGPIPE,
+                &enabled,
+                static_cast<socklen_t>(sizeof(enabled))
+            ),
+            "setsockopt(SO_NOSIGPIPE)"
+        );
+#endif
+
         set_socket_timeout(connection, SO_RCVTIMEO, default_timeout); // configure recv()'s timeout
         set_socket_timeout(connection, SO_SNDTIMEO, default_timeout); // configure send()'s timeout
         return connection;
@@ -227,20 +247,7 @@ void configure_receive(
             deadline - now
         );
 
-    // How long the next recv() can block while waiting for data
-    const DWORD timeout_ms = static_cast<DWORD>(remaining.count());
-
-    if(::setsockopt(
-        connection.native_handle(),
-        SOL_SOCKET,
-        SO_RCVTIMEO,
-        reinterpret_cast<const char*>(&timeout_ms),
-        sizeof(timeout_ms)
-    ) == SOCKET_ERROR) {
-        throw SocketError(
-            "Request rejected: failed to configure receive timeout"
-        );
-    }
+    set_socket_timeout(connection, SO_RCVTIMEO, remaining);
 }
 
 void configure_send(
@@ -263,18 +270,5 @@ void configure_send(
             deadline - now
         );
 
-    // How long the next send() can block while waiting for data
-    const DWORD timeout_ms = static_cast<DWORD>(remaining.count());
-    
-    if(::setsockopt(
-        connection.native_handle(),
-        SOL_SOCKET,
-        SO_SNDTIMEO,
-        reinterpret_cast<const char*>(&timeout_ms),
-        sizeof(timeout_ms)
-    ) == SOCKET_ERROR) {
-        throw SocketError(
-            "Request rejected: failed to configure send timeout"
-        );
-    }
+    set_socket_timeout(connection, SO_SNDTIMEO, remaining);
 }

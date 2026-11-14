@@ -10,7 +10,6 @@
 #include <string>
 #include <vector>
 #include <variant>
-#include <winsock2.h>
 
 struct Request {
     RequestLine request_line;
@@ -43,8 +42,7 @@ struct RequestError {
 
 using RequestClock = std::chrono::steady_clock;
 using RequestData = std::variant<Request, RequestError>;
-
-constexpr DWORD receive_timeout_ms{10000};    // Time out operations in 10 seconds
+    
 constexpr int receive_buffer_size{4096};      // Preallocated receiving buffer size
 constexpr int max_header_bytes{20 * 1024};    // Receive at most 20k bytes per request header
 constexpr std::size_t max_chunk_bytes{65536}; // Send at most 64k bytes per send operation

@@ -33,8 +33,12 @@ Socket& Socket::operator=(Socket&& other) noexcept {
     // Prevent self-moves
     if(this != &other) {
         if(valid()) {
-            closesocket(handle_); // Close existing socket if still open
-        }
+#ifdef _WIN32
+            ::closesocket(handle_);
+#else
+            ::close(handle_);
+#endif
+    }
 
         // Move other handle to current socket object, and invalidate other handle
         handle_ = std::exchange(other.handle_, net::invalid_socket);

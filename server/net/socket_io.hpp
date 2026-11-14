@@ -1,6 +1,5 @@
 #pragma once
 
-#include "http/header.hpp"
 #include "http/request.hpp"
 #include "net/socket.hpp"
 

@@ -2,8 +2,13 @@
 #include "http/header.hpp"
 #include "http/http_utils.hpp"
 
-#include <winsock2.h>
+#ifdef _WIN32
+#include <winsock2.h> 
 #include <ws2tcpip.h>
+#else
+#include <arpa/inet.h>  // IP address conversion functions
+#include <netinet/in.h> // Internet address structures and constants
+#endif
 
 #include <algorithm>
 #include <bitset>
@@ -111,9 +116,10 @@ namespace {
 
     // Validate IPv4 address
     bool is_valid_ipv4(std::string_view addr_text) {
-        
         // InetPtonA requires null-terminated string--convert to std::string
         const std::string address{addr_text};
+
+#ifdef _WIN32
         IN_ADDR parsed{};
 
         return InetPtonA(
@@ -121,6 +127,15 @@ namespace {
             address.c_str(),
             &parsed
         ) == 1;
+#else
+        in_addr parsed{};
+
+        return inet_pton(
+            AF_INET,
+            address.c_str(),
+            &parsed
+        ) == 1;
+#endif  
     }
 
 
@@ -129,6 +144,8 @@ namespace {
         
         // InetPtonA requires null-terminated string--convert to std::string
         const std::string address{addr_text};
+        
+#ifdef _WIN32
         IN6_ADDR parsed{};
 
         return InetPtonA(
@@ -136,6 +153,15 @@ namespace {
             address.c_str(),
             &parsed
         ) == 1;
+#else
+        in6_addr parsed{};
+
+        return inet_pton(
+            AF_INET6,
+            address.c_str(),
+            &parsed
+        ) == 1;
+#endif  
     }
 
     // Validate address port

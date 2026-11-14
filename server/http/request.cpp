@@ -8,6 +8,13 @@
 #include "net/socket.hpp"
 #include "net/socket_io.hpp"
 
+#ifdef _WIN32
+#include <winsock2.h>
+#else
+#include <sys/socket.h>
+#include <cerrno>
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -15,7 +22,6 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include <winsock2.h>
 
 using RequestClock = std::chrono::steady_clock;
 
@@ -76,7 +82,7 @@ void collect_request_body(
         // Update receive deadline for receiving bytes for constructing request body
         configure_receive(connection, deadline);
 
-        int received_bytes {
+        const auto received_bytes {
             ::recv(
                 connection.native_handle(),
                 buffer,
@@ -102,19 +108,35 @@ void collect_request_body(
         }
 
         // Encountered some socket error
-        else if (received_bytes == SOCKET_ERROR) {
-            const int error = WSAGetLastError();
+        else {
+#ifdef _WIN32
+            const int error{WSAGetLastError()};
+            const bool interrupted{error == WSAEINTR};
+            const bool timed_out{error == WSAETIMEDOUT};
+#else
+            const int error{errno};
+            const bool interrupted{error == EINTR};
+            const bool timed_out{
+                error == EAGAIN ||
+                error == EWOULDBLOCK ||
+                error == ETIMEDOUT
+            };
+#endif
 
-        if(error == WSAEINTR) {
-            continue; // Retry using the original deadline.
+            if(interrupted) {
+                continue; // Retry without resetting the original deadline.
+            }
+
+            if(timed_out) {
+                throw http_errors::request_timeout(
+                    "Timed out while receiving the request."
+                );
+            }
+
+            throw SocketError{
+                "recv() failed with error code: " + std::to_string(error)
+            };
         }
-
-        if(error == WSAETIMEDOUT) {
-            throw http_errors::request_timeout("Timed out while receiving the request body.");
-        }
-
-        std::cerr << "Body receive failed: Winsock error " << error << '\n';
-        throw http_errors::unknown_error("Socket receive failed."); // Do not return an HTTP response in this case
     }
 
     // Check elapsed time against deadline
@@ -125,7 +147,6 @@ void collect_request_body(
               << expected_body_bytes
               << " bytes; received: "
               << request_body.size() << " bytes\n";
-    }
 }
 
 RequestData process_request(

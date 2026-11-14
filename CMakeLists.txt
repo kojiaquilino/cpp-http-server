@@ -27,7 +27,7 @@ add_library(server_net
     server/net/network.cpp
     server/net/socket.cpp
     server/net/socket_io.cpp
-    server/net/winsock_runtime.cpp
+    server/net/network_runtime.cpp
 )
 
 target_include_directories(server_net PUBLIC server)
