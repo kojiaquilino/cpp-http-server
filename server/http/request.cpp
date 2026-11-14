@@ -67,7 +67,6 @@ void collect_request_body(
     check_deadline(deadline, "Request rejected: receive deadline expired");
 
     if(expected_body_bytes == 0) {
-        std::cout << "No body attached to current HTTP request.\n";
         return;
     }
 
