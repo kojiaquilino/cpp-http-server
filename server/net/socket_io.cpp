@@ -24,10 +24,10 @@ using RequestClock = std::chrono::steady_clock;
 /// @param message The error message to include in the exception.
 void check_deadline(
     RequestClock::time_point deadline,
-    const char* message
+    std::string_view message
 ) {
     if(RequestClock::now() >= deadline) {
-        throw std::runtime_error(message);
+        throw http_errors::request_timeout(std::string{message});
     }
 }
 
@@ -43,7 +43,7 @@ void send_response(const Socket& connection, std::string_view bytes) {
         const auto chunk_size = static_cast<int>(std::min(remaining, max_chunk_bytes)); // Max number of bytes to send in next chunk (max=65536 bytes)
         const char* chunk_start = bytes.data() + sent_bytes;                            // Maintain pointer to start of data to send
         
-        check_deadline(deadline, "Request rejected: send deadline expired");
+        check_deadline(deadline, "Request rejected: send deadline expired.");
         configure_send(connection, deadline);
 
         const int successful_bytes{
@@ -75,14 +75,14 @@ void send_response(const Socket& connection, std::string_view bytes) {
     }
 
     // Check deadline once more after final send: reject if deadline elapsed
-    check_deadline(deadline, "Request rejected: send deadline expired");
+    check_deadline(deadline, "Request rejected: send deadline expired.");
 }
 
 
 /// @brief Receives and parses one HTTP request from the client connection.
 /// @param connection The client socket from which request bytes are received.
 /// @return The parsed request, or `std::nullopt` if the connection closes or the request is invalid.
-std::optional<Request> receive_request(const Socket& connection) {
+RequestData receive_request(const Socket& connection) noexcept {
     char buffer[receive_buffer_size]{};                                   // local buffer to store received raw character data
     std::string incoming_bytes;                                           // retain received bytes across multiple reads: used for constructing http headers
     const auto deadline = RequestClock::now() + std::chrono::seconds{10}; // Initialize response receive timeout (default=10 seconds)
@@ -104,7 +104,7 @@ std::optional<Request> receive_request(const Socket& connection) {
             };
 
             if(received_bytes > 0) {
-                check_deadline(deadline, "Request rejected: receive deadline expired");
+                check_deadline(deadline, "Request rejected: receive deadline expired.");
 
                 // Construct HTTP request and search for header terminator "\r\n\r\n"
                 incoming_bytes.append(buffer, static_cast<std::size_t>(received_bytes));
@@ -114,8 +114,8 @@ std::optional<Request> receive_request(const Socket& connection) {
                     
                     // Compare up to header terminator start + 4 characters
                     if(headers_end_idx + 4 > max_header_bytes) {
-                        std::cerr << "Rejected connection: HTTP headers exceed limit.\n";
-                        break; // Close connection when exceeding header size
+                        std::cerr << "Rejected connection: HTTP headers exceed byte limit.\n";
+                        throw http_errors::headers_too_large("HTTP headers exceed byte limit.");
                     }
 
                     // Returns processed request or std::nullopt on failure
@@ -123,7 +123,7 @@ std::optional<Request> receive_request(const Socket& connection) {
 
                 } else if(incoming_bytes.size() >= max_header_bytes) {
                     std::cerr << "Rejected connection: HTTP headers exceed byte limit.\n";
-                    break;
+                    throw http_errors::headers_too_large("HTTP headers exceed byte limit.");
                 }
             } 
             
@@ -134,14 +134,30 @@ std::optional<Request> receive_request(const Socket& connection) {
 
             // SOCKET_ERROR: report error 
             else {
-                std::cerr << "recv() failed with error code: " + std::to_string(WSAGetLastError()) << '\n';
-                break;
+               const int error = WSAGetLastError();
+
+                if(error == WSAEINTR) {
+                    continue; // Retry using the original deadline.
+                }
+
+                if(error == WSAETIMEDOUT) {
+                    throw http_errors::request_timeout(
+                        "Timed out while receiving HTTP headers."
+                    );
+                }
+
+                std::cerr << "recv() failed: Winsock error " << error << '\n';
+                throw http_errors::unknown_error("Socket receive failed."); // Do not return an HTTP response in this case
             }
         }
+    } catch(const HTTPError& http_error) {
+        std::cerr << "Rejected connection: " << http_error.what() << '\n';
+        return RequestError{http_error};
+
     } catch(const std::exception& error) {
         std::cerr << "Rejected HTTP request: " << error.what() << '\n';
     }
 
     // Default return for all errors/invalid requests
-    return std::nullopt;
+    return RequestError{http_errors::unknown_error("An unknown error occurred.")};
 }

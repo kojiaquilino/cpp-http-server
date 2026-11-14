@@ -1,14 +1,16 @@
+#include "http/error.hpp"
 #include "http/request_line.hpp"
 
 #include <algorithm>
 #include <ranges>
 #include <stdexcept>
 #include <string_view>
+#include <vector>
 
 namespace {
-
     // Max size of a request line (-2 to reflect 2 bytes for CRLF control chars)
     constexpr int max_request_line_bytes{4096 - 2};
+    const std::vector<std::string> allowed_methods{"GET", "POST"};
 
     // Validates method field of request line
     bool has_invalid_method_character(std::string_view method) {
@@ -40,7 +42,7 @@ RequestLine parse_request_line(std::string_view line) {
 
     // Reject request lines exceeding 4KiB limit
     if(line.size() > max_request_line_bytes) {
-        throw std::invalid_argument("HTTP request line exceeds limit");
+        throw http_errors::uri_too_long("HTTP request line exceeds limit.");
     }
 
 
@@ -49,7 +51,7 @@ RequestLine parse_request_line(std::string_view line) {
 
     // Reject if != 3 fields in request line
     if(num_fields != 3) {
-        throw std::invalid_argument("Malformed request line in incoming HTTP request");
+        throw http_errors::bad_request("Malformed request line in incoming HTTP request.");
     }
 
     RequestLine r{};
@@ -60,7 +62,7 @@ RequestLine parse_request_line(std::string_view line) {
         const std::string_view field{std::string_view(f.begin(), f.end())};
 
         if(field.size() == 0) {
-            throw std::invalid_argument("Request fields in HTTP request must be nonempty");
+            throw http_errors::bad_request("Request fields in HTTP request must be nonempty.");
         }
 
         // Different checks based on request line field
@@ -68,7 +70,9 @@ RequestLine parse_request_line(std::string_view line) {
             case 0: { // HTTP Method
                 // Validate all characters in method
                 if(has_invalid_method_character(field)) {
-                    throw std::invalid_argument("Invalid HTTP method");
+                    throw http_errors::bad_request("Request line contains an invalid HTTP method.");
+                } else if(std::find(allowed_methods.begin(), allowed_methods.end(), r.method) == allowed_methods.end()) {
+                    throw http_errors::not_implemented("This server supports only GET and POST.");
                 }
 
                 r.method = field;
@@ -77,12 +81,12 @@ RequestLine parse_request_line(std::string_view line) {
             case 1: { // HTTP Target Path
                 // Must start with '/'
                 if(field.front() != '/') {
-                    throw std::invalid_argument("Requested path must start with '/'");
+                    throw http_errors::bad_request("Requested path must start with '/'.");
                 }
 
                 // Validate all characters in target/path
                 if(has_invalid_target_character(field)) {
-                    throw std::invalid_argument("Invalid HTTP target");
+                    throw http_errors::bad_request("Request line contains an invalid HTTP target.");
                 }
 
                 r.target = field;
@@ -90,7 +94,7 @@ RequestLine parse_request_line(std::string_view line) {
             }
             case 2: { // HTTP Version
                 if(field != "HTTP/1.1") {
-                    throw std::invalid_argument("HTTP requests require version HTTP/1.1");
+                    throw http_errors::bad_request("HTTP requests require version HTTP/1.1.");
                 }
                 r.version = field;  
                 break;

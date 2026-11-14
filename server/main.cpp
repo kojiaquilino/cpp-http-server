@@ -1,11 +1,13 @@
-#include "http/response.hpp"
+#include "http/error.hpp"
 #include "net/network.hpp"
+#include "http/response.hpp"
 #include "net/socket.hpp"
 #include "net/socket_io.hpp"
 #include "net/winsock_runtime.hpp"
 
 #include <iostream>
 #include <optional>
+#include <variant>
 
 int main() {
     try {
@@ -27,31 +29,57 @@ int main() {
             Socket connection{accept_incoming_connection(listener_socket)};
 
             // Blocks until receiving an HTTP request on the connected socket
-            std::optional<Request> parsed_request{receive_request(connection)};
+            RequestData request_result{receive_request(connection)};
+            Response response;
+            bool close_socket = false;
 
-            if(!parsed_request.has_value()) {
-                std::cerr << "Failed to complete latest HTTP request.\n";
-                continue;
+            std::visit([&](const auto& value) {
+                using T = std::decay_t<decltype(value)>;
+
+                if constexpr(std::is_same_v<T, Request>) {
+                    response = {
+                        200,
+                        "OK",
+                        "text/plain",
+                        "Hello"
+                    };
+                } else if constexpr(std::is_same_v<T, RequestError>) {
+                    auto request_error = static_cast<RequestError>(value);
+                    
+                    if(request_error.status_code == 0) {
+                        std::cerr << "Encountered a fatal socket error: closing connection...\n";
+                        close_socket = true;
+                        return;
+                    }
+
+                    response = {
+                        request_error.status_code,
+                        request_error.reason_phrase,
+                        "text/plain",
+                        request_error.message
+                    };
+
+                } else {
+                    std::cerr << "Unable to process request_result: exiting program...\n";
+                    return 1;
+                }
+            }, request_result);
+
+            // If encountered fatal socket error: close connection
+            if(close_socket) {
+                break;
             }
 
             try {
-                const Response response{
-                    200,
-                    "OK",
-                    "text/plain",
-                    "Hello"
-                };
-
                 const auto bytes = serialize_response(response);
                 send_response(connection, bytes);
+
             } catch(const std::exception& error) {
                 std::cerr << "Response send failed: " << error.what() << '\n';
             }
         }
 
-        // std::cout << "Cleaning up...\n";
-
-    } catch (const std::exception& error) {
+    } catch(const std::exception& error) {
         std::cerr << "Encountered an error: " << error.what() << '\n';
         return 1;
     }

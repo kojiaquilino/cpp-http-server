@@ -1,3 +1,4 @@
+#include "http/error.hpp"
 #include "http/header.hpp"
 #include "http/http_utils.hpp"
 
@@ -54,7 +55,7 @@ namespace {
 
         // Validate hostname length constraints (1-253 characters)
         if(hostname.empty() || hostname.size() > 253) {
-            throw std::invalid_argument("Invalid hostname length");
+            throw http_errors::bad_request("Invalid hostname length");
         }
 
         // Define local helper function
@@ -76,12 +77,12 @@ namespace {
             const auto label = hostname.substr(start, end - start);
 
             if(label.empty() || label.size() > 63) {
-                throw std::invalid_argument("Invalid hostname label length");
+                throw http_errors::bad_request("Invalid hostname label length");
             }
 
             if(!is_alphanumeric(label.front())
             || !is_alphanumeric(label.back())) {
-                throw std::invalid_argument(
+                throw http_errors::bad_request(
                     "Hostname must start and end with a letter or digit"
                 );
             }
@@ -91,7 +92,7 @@ namespace {
                 [&](unsigned char c) {
                     return is_alphanumeric(c) || c == '-'; 
                 })) {
-                throw std::invalid_argument("Invalid hostname chracter");
+                throw http_errors::bad_request("Invalid hostname chracter");
             }
 
             if(dot == std::string::npos) {
@@ -104,7 +105,7 @@ namespace {
             // Reject empty final label after removing 
             // one trailing dot (if another dot exists)
             if(start == hostname.size()) {
-                throw std::invalid_argument("Empty hostname label");
+                throw http_errors::bad_request("Empty hostname label");
             }
         }
     }
@@ -148,7 +149,7 @@ namespace {
                 return (c < '0' || c > '9');
             }
         )) {
-            throw std::invalid_argument("Address port must be a valid port number");
+            throw http_errors::bad_request("Address port must be a valid port number");
         }
 
         int port;
@@ -161,7 +162,7 @@ namespace {
 
         // Valid ports are 0 - 65535
         if(port < 0 || port > 65535) {
-            throw std::invalid_argument("Port number must be in the range 0 - 65535");
+            throw http_errors::bad_request("Port number must be in the range 0 - 65535");
         }
 
         // std::uint16_t guarantees 16 bits to represent port (0-65535)
@@ -172,7 +173,7 @@ namespace {
     // Validate value of Host header
     void validate_host(std::string_view host_authority) {
         if(host_authority.empty()) {
-            throw std::invalid_argument("Host value cannot be empty");
+            throw http_errors::bad_request("Host value cannot be empty");
         }
 
 
@@ -184,13 +185,13 @@ namespace {
             const auto closing_bracket = host_authority.find(']');
 
             if(closing_bracket == std::string::npos) {
-                throw std::invalid_argument("Missing closing IPv6 bracket");
+                throw http_errors::bad_request("Missing closing IPv6 bracket");
             }
 
             // Exclude enclosing brackets
             std::string_view ipv6_address{host_authority.substr(1, closing_bracket - 1)};
             if(!is_valid_ipv6(ipv6_address)) {
-                throw std::invalid_argument("IPv6 address as hostname is malformed");
+                throw http_errors::bad_request("IPv6 address as hostname is malformed");
             }
 
             // Either pointing to colon or no character
@@ -198,7 +199,7 @@ namespace {
 
             if(hostname_end == host_authority.size())       return; // No port attached to hostname, report valid host header (containing only hostname)
             else if(host_authority.at(hostname_end) == ':') port = host_authority.substr(hostname_end + 1); // Get port string as host substring 
-            else                                            throw std::invalid_argument("Missing colon delimiter between hostname and port");
+            else                                            throw http_errors::bad_request("Missing colon delimiter between hostname and port");
         } else {
 
             // Might not exist, then just take whole string as IPv4 address or hostname
@@ -221,7 +222,7 @@ namespace {
             // Validate IPv4 foramt
             if(is_ipv4) {
                 if(!is_valid_ipv4(host)) {
-                    throw std::invalid_argument("IPv4 address as hostname is malformed");
+                    throw http_errors::bad_request("IPv4 address as hostname is malformed");
                 }
 
             // Validate hostname format
@@ -229,8 +230,8 @@ namespace {
                 validate_hostname(host);
             }
 
-            if(delimiter == std::string::npos) return;                                      // host_authority only contains valid hostname
-            else                               port = host_authority.substr(delimiter + 1); // Get port as host substring
+            if(delimiter != std::string::npos) port = host_authority.substr(delimiter + 1); // Get port as host substring
+            else return;                                                                    // host_authority only contains valid hostname
         }
 
         // Attempts to parse an address port,
@@ -247,7 +248,7 @@ namespace {
                 return (c < 48 || c > 57);
             }
         )) {
-            throw std::invalid_argument("Content-Length must be a valid number");
+            throw http_errors::bad_request("Content-Length must be a valid number");
         }
 
         // value is guaranteed to only have integers (validated above)
@@ -256,25 +257,22 @@ namespace {
 
         // Ensure all characters were consumed in conversion (e.g. ptr at end of string)
         if(ec != std::errc() || ptr != value.data() + value.size()) {
-            throw std::invalid_argument("Content-Length must be a valid number");
+            throw http_errors::bad_request("Content-Length must be a valid number");
         }
 
         if(content_length > max_body_bytes) {
-            throw std::invalid_argument("Content-Length exceeds maximum 12MB limit");
+            throw http_errors::content_too_large("Content-Length exceeds maximum 12MB limit");
         }
 
         return content_length;
     }
 }
 
-/// @brief Parses, validates, and sanitizes a single HTTP header line.
-/// @param line Header line containing a name, colon separator, and value.
-/// @return The parsed header with a lowercase name and trimmed value.
 Header parse_header_line(std::string_view line) {
     std::size_t split{line.find(':')};
     
     if(split == std::string::npos) {
-        throw std::invalid_argument("Invalid HTTP header: header is malformed without a separator");
+        throw http_errors::bad_request("Malformed HTTP header: header is malformed without a separator.");
     }
 
     std::string name{line.substr(0, split)};
@@ -284,17 +282,17 @@ Header parse_header_line(std::string_view line) {
     //// Validating Header name ////
 
     if(name.empty()) {
-        throw std::invalid_argument("Invalid HTTP header: header cannot be empty");
+        throw http_errors::bad_request("Malformed HTTP header: header cannot be empty.");
     }
 
     // Check if contains illegal char
     if(has_invalid_header_name_char(name)) {
-        throw std::invalid_argument("Invalid HTTP header: header name contains an illegal symbol");
+        throw http_errors::bad_request("Malformed HTTP header: header name contains an illegal symbol.");
     }
     
     // Check if leading/trailing whitespace on header
     if(std::isspace(name.front()) || std::isspace(name.back())) {
-        throw std::invalid_argument("Invalid HTTP header: cannot have whitespace before or after header");
+        throw http_errors::bad_request("Malformed HTTP header: cannot have whitespace before or after header.");
     }
 
     // Convert header name to lowercase
@@ -308,7 +306,7 @@ Header parse_header_line(std::string_view line) {
 
     // Check if contains illegal char
     if(has_invalid_header_value_char(value)) {
-        throw std::invalid_argument("Invalid HTTP header: header value contains an illegal symbol");
+        throw http_errors::bad_request("Malformed HTTP header: header value contains an illegal symbol.");
     }
 
     // Return new header after values are validated and sanitized
@@ -318,9 +316,6 @@ Header parse_header_line(std::string_view line) {
     };
 }
 
-/// @brief Validates request headers and determines the request framing mode.
-/// @param headers Headers to validate for duplicates and request-framing rules.
-/// @return The framing mode implied by the validated request headers.
 RequestFraming validate_request_headers(
     const std::vector<Header>& headers
 ) {
@@ -331,13 +326,15 @@ RequestFraming validate_request_headers(
 
     auto check_duplicate = [&](HeaderType header) {
         auto idx = HTTPUtils::to_int(header);
+
         if(visited_headers.test(idx)) {
-            throw std::invalid_argument("Cannot contain duplicate " + HTTPUtils::header_to_string(header) + " header");
+            // can add conditionals here for headers that allow duplicates
+            throw http_errors::bad_request("Cannot contain duplicate " + HTTPUtils::header_to_string(header) + " header");
         }
         visited_headers.set(idx);
     };
 
-    // Process and validate each header passed into the function via the vector 
+    // Process and validate each header passed into the function via the vector
     for(const auto& [name, value] : headers) {
 
         // Preserve header name, but retrieve enum type
@@ -355,7 +352,11 @@ RequestFraming validate_request_headers(
                 continue;
             }
             case HeaderType::TransferEncoding: {
-                throw std::invalid_argument("Transfer-Encoding is unsupported");
+                if(visited_headers.test(HTTPUtils::to_int(HeaderType::ContentLength))) {
+                    throw http_errors::bad_request("Transfer-Encoding and Content-Length must not appear together.");
+                }
+
+                throw http_errors::not_implemented("Transfer-Encoding is unsupported");
             }
             case HeaderType::Other: {
                 // Do not check for duplicates for all other headers
@@ -365,7 +366,7 @@ RequestFraming validate_request_headers(
     }
 
     if(!visited_headers.test(HTTPUtils::to_int(HeaderType::Host))) {
-        throw std::invalid_argument("HTTP Request header requires at least one \"Host\" header");
+        throw http_errors::bad_request("HTTP Request header requires at least one \"Host\" header");
     }
 
     return RequestFraming{
