@@ -176,7 +176,7 @@ void configure_receive(
         reinterpret_cast<const char*>(&timeout_ms),
         sizeof(timeout_ms)
     ) == SOCKET_ERROR) {
-        throw std::runtime_error(
+        throw SocketError(
             "Request rejected: failed to configure receive timeout"
         );
     }
@@ -212,7 +212,7 @@ void configure_send(
         reinterpret_cast<const char*>(&timeout_ms),
         sizeof(timeout_ms)
     ) == SOCKET_ERROR) {
-        throw std::runtime_error(
+        throw SocketError(
             "Request rejected: failed to configure send timeout"
         );
     }

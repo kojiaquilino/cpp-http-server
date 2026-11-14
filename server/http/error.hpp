@@ -15,6 +15,12 @@ public:
           reason_phrase{std::move(reason)} {}
 };
 
+// Identify separately from generic runtime errors and HTTP errors
+class SocketError : public std::runtime_error {
+public:
+    using std::runtime_error::runtime_error;
+};
+
 namespace http_errors {
 
     inline HTTPError unknown_error(std::string message) {

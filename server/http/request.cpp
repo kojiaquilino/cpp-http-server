@@ -145,12 +145,6 @@ RequestData process_request(
     // Populate request line of HTTP request
     try {
         request_line = parse_request_line(incoming_bytes.substr(0, request_line_end_idx));
-
-        // Check if the method provided in `request_line` is a supported method
-        if(std::find(supported_methods.begin(), supported_methods.end(), request_line.method) == supported_methods.end()) {
-            throw http_errors::not_implemented("This server supports only GET and POST.");
-        }
-
         std::cout << ("Output: " + request_line.method + ' ' + request_line.target + ' ' + request_line.version) << '\n';
 
         // Parse and populate remaining HTTP request headers after request line
@@ -160,6 +154,11 @@ RequestData process_request(
             request_line_end_idx,
             request_headers
         );
+
+        // Check if the method provided in `request_line` is a supported method
+        if(std::find(supported_methods.begin(), supported_methods.end(), request_line.method) == supported_methods.end()) {
+            throw http_errors::not_implemented("This server supports only GET and POST.");
+        }
 
         // Validate populated headers and extract headers from HTTP request to populate `request_headers`
         // Currently retrieves Content-Length: number of body bytes to receive from HTTP request
@@ -191,6 +190,9 @@ RequestData process_request(
     } catch(const HTTPError& http_error) {
         std::cerr << "Encountered an error when processing HTTP request: " << http_error.what() << '\n';
         return RequestError{http_error};
+    } catch(const SocketError& socket_error) {
+        std::cerr << "Encountered an error when configuring network socket: " << socket_error.what() << '\n';
+        return RequestError{http_errors::unknown_error(socket_error.what())};
     } catch(const std::exception& error) {
         std::cerr << "Encountered an unknown error when processing HTTP request: " << error.what() << '\n';
         return RequestError{http_errors::internal_server_error("Unknown server error when processing HTTP request")};
