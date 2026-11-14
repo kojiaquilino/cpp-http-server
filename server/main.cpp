@@ -24,6 +24,13 @@ int main() {
 
         start_listener(listener_socket);
 
+        const auto test_handler = [](const Request&) {
+            return Response{200, "OK", "text/plain", "Hello :)"};
+        };
+
+        // Register temporary routes
+        router.register_handler("GET", "/", test_handler);
+
         // Receive and accept incoming connections
         // Currently closes accepted socket after receiving one request
         while(true) {
@@ -39,8 +46,22 @@ int main() {
                 using T = std::decay_t<decltype(value)>;
 
                 if constexpr(std::is_same_v<T, Request>) {
+
                     const auto request = static_cast<Request>(value);
-                    response = router.dispatch(request);
+
+                    try {
+                        response = router.dispatch(request);
+                    } catch(const HTTPError& http_error) {
+                        response = Response{RequestError{http_error}};
+                    } catch(const std::exception& error) {
+                        std::cerr << "An unknown exception occurred: " << error.what() << '\n';
+                        response = Response{
+                            RequestError{http_errors::internal_server_error(
+                                "An unknown error occurred while processing the request."
+                            )}
+                        };
+                    }
+
                 } else if constexpr(std::is_same_v<T, RequestError>) {
                     const auto request_error = static_cast<RequestError>(value);
                     
@@ -53,8 +74,7 @@ int main() {
                     response = {request_error};
 
                 } else {
-                    std::cerr << "Unable to process request_result: exiting program...\n";
-                    return 1;
+                    std::cerr << "Unable to process request_result.\n";
                 }
             }, request_result);
 
@@ -63,13 +83,18 @@ int main() {
                 continue;
             }
 
-            try {
-                const auto bytes = serialize_response(response);
-                send_response(connection, bytes);
+            std::string bytes;
 
+            try {
+                bytes = serialize_response(response); // Serialize response to return
+            } catch(const HTTPError& http_error) {
+                bytes = serialize_response({RequestError{http_error}}); // Serialize error returned instead to return
             } catch(const std::exception& error) {
                 std::cerr << "Response send failed: " << error.what() << '\n';
+                continue;
             }
+
+            send_response(connection, bytes);
         }
 
     } catch(const std::exception& error) {

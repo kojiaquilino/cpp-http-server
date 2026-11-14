@@ -1,3 +1,4 @@
+#include "http/http_utils.hpp"
 #include "http/response.hpp"
 
 #include <algorithm>
@@ -7,6 +8,7 @@
 
 std::string serialize_response(const Response& response) {
     std::string serialized{};
+    std::vector<Header> parsed_extra_headers{};
     auto [status_code, reason_phrase, content_type, body, extra_headers] = response;
     const auto validate_content = [](const std::string& content) { // prevent control characters from corrupting response headers
         return std::all_of(
@@ -41,12 +43,34 @@ std::string serialize_response(const Response& response) {
         )
     );
 
-    // Adding extra headers to the serialized response
-    for(const auto& header : response.extra_headers) {
-        // Assuming Header has fields named name and value:
-        serialized += header.name + ": " + header.value + "\r\n";
+    // Parsing headers from string representations
+    for(const auto& string_header : extra_headers) {
+        try {
+            const auto parsed_header = parse_header_line(string_header);
+            
+            // If parsed header is a duplicate header (of a reserved type), throw HTTPError
+            const auto normalized_name = HTTPUtils::lowercase(parsed_header.name);
+
+            if (std::find(
+                    reserved_headers.begin(),
+                    reserved_headers.end(),
+                    normalized_name
+                ) != reserved_headers.end()) {
+                throw http_errors::bad_request("Cannot contain duplicate " + parsed_header.name + " header.");
+            }
+
+            parsed_extra_headers.push_back(parsed_header);
+            
+        } catch(const HTTPError&) {
+            throw;
+        }
     }
 
+    // Adding extra headers to serialized response
+    for(const auto& header: parsed_extra_headers) {
+        serialized += header.name + ": " + header.value + "\r\n";
+    }
+    
     serialized.append("\r\n");  // Separates headers and body
     serialized.append(body);    // Append body to response
 

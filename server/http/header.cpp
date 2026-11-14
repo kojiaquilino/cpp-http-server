@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <bitset>
 #include <charconv>
+#include <iostream>
 #include <stdexcept>
 #include <string_view>
 #include <vector>
@@ -170,7 +171,7 @@ namespace {
     // Validate value of Host header
     void validate_host(std::string_view host_authority) {
         if(host_authority.empty()) {
-            throw http_errors::bad_request("Host value cannot be empty");
+            throw http_errors::bad_request("Host value cannot be empty.");
         }
 
 
@@ -292,11 +293,6 @@ Header parse_header_line(std::string_view line) {
         throw http_errors::bad_request("Malformed HTTP header: cannot have whitespace before or after header.");
     }
 
-    // Convert header name to lowercase
-    for(auto& ch : name) {
-        ch = std::tolower(ch);
-    }
-
     //// Validating Header value ////
 
     HTTPUtils::trim(value); // Trims in-place
@@ -316,6 +312,7 @@ Header parse_header_line(std::string_view line) {
 RequestFraming validate_request_headers(
     const std::vector<Header>& headers
 ) {
+    using enum HeaderType;
 
     // Track and reject duplicate headers 
     std::bitset<header_count> visited_headers;
@@ -326,7 +323,7 @@ RequestFraming validate_request_headers(
 
         if(visited_headers.test(idx)) {
             // can add conditionals here for headers that allow duplicates
-            throw http_errors::bad_request("Cannot contain duplicate " + HTTPUtils::header_to_string(header) + " header");
+            throw http_errors::bad_request("Cannot contain duplicate " + HTTPUtils::header_to_string(header) + " header.");
         }
         visited_headers.set(idx);
     };
@@ -338,21 +335,25 @@ RequestFraming validate_request_headers(
         HeaderType type{HTTPUtils::classify_header(name)};
 
         switch(type) {
-            case HeaderType::Host: {
+            case Host: {
                 check_duplicate(type);
                 validate_host(value);
                 continue;
             }
-            case HeaderType::ContentLength: {
+            case ContentLength: {
                 check_duplicate(type);
                 content_length = parse_content_length(value);
                 continue;
             }
-            case HeaderType::TransferEncoding: {
+            case TransferEncoding: {
                 check_duplicate(type);
                 continue; // Rejected later after parsing all headers
             }
-            case HeaderType::Expect: {
+            case Allow: {
+                check_duplicate(type);
+                continue;   
+            }
+            case Expect: {
                 throw http_errors::expectation_failed("Expect is unsupported.");
             }
             case HeaderType::Other: {
@@ -377,6 +378,12 @@ RequestFraming validate_request_headers(
     if(!visited_headers.test(HTTPUtils::to_int(HeaderType::Host))) {
         throw http_errors::bad_request("HTTP Request header requires at least one \"Host\" header");
     }
+
+    for (const auto& [name, value] : headers) {
+    std::cerr << "Parsed header: [" << name
+              << "] = [" << value << "]\n";
+}
+
 
     return RequestFraming{
         content_length

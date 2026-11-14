@@ -23,7 +23,7 @@ bool request_line::has_invalid_target_character(std::string_view target) {
         target.begin(),
         target.end(),
         [](unsigned char c) {
-            return c <= 32 || c >= 127;
+            return c <= 32 || c >= 127 || c == '#';
         }
     );
 }

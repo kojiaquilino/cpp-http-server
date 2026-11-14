@@ -4,18 +4,26 @@
 #include "http/header.hpp"
 #include "http/request.hpp"
 
+#include <array>
 #include <string>
+#include <string_view>
 #include <vector>
 
 // Response struct constructed by HTTP server to send to client
 // Represents the HTTP response data constructed by the server for a client.
 
+constexpr std::array<std::string_view, 3> reserved_headers{
+    "content-length",
+    "content-type",
+    "connection"
+};
+
 struct Response {
-    int status_code;                     // Result of request
-    std::string reason_phrase;           // Accompanying description of status
-    std::string content_type;            // Format of response body
-    std::string body;                    // Content returned to client
-    std::vector<Header> extra_headers{}; // Allowed methods for path + additional headers
+    int status_code;                          // Result of request
+    std::string reason_phrase;                // Accompanying description of status
+    std::string content_type;                 // Format of response body
+    std::string body;                         // Content returned to client
+    std::vector<std::string> extra_headers{}; // Allowed methods for path + additional headers
 
     // Default constructor
     Response() = default;
@@ -26,7 +34,7 @@ struct Response {
         std::string reason_phrase,
         std::string content_type,
         std::string body,
-        std::vector<Header> extra_headers
+        std::vector<std::string> extra_headers = {}
     ) 
         : status_code{status_code},
           reason_phrase{reason_phrase},
@@ -51,7 +59,7 @@ struct Response {
             // Remove last ", "
             methods.erase(methods.size() > 2 ? methods.size() - 2 : 0);
             if(!methods.empty()) {
-                extra_headers.emplace_back("Allow", methods);
+                extra_headers.emplace_back("Allow: " + methods);
             }
         }
 };

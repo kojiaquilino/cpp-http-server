@@ -7,12 +7,13 @@
 
 
 constexpr std::size_t max_body_bytes{12 * 1024 * 1024}; // Byte limit for Content-Length
-constexpr std::size_t header_count{5};                  // Number of available options for HeaderType
+constexpr std::size_t header_count{6};                  // Number of available options for HeaderType
 
 enum class HeaderType {
     Host,
     ContentLength,
     TransferEncoding,
+    Allow,
     Expect,
     Other
 };
