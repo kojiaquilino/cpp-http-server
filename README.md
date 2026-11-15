@@ -1,6 +1,9 @@
-# cpp-media-library
+cpp-http-server
 
-A C++20 image-processing library and command-line tool.
+A C++20 HTTP/1.1 server with an image-processing library and command-line tool.
+
+Implements request parsing, routing, and response serialization directly on
+Winsock and POSIX sockets, without an HTTP framework or parser dependency.
 
 Supports grayscale conversion, thresholding, box blur, Gaussian blur, and
 Sobel edge detection through an ordered operation pipeline.
@@ -11,6 +14,12 @@ media_demo input.jpg edges.png --grayscale --gaussian-blur 3 1.0 --sobel
 
 ## Features
 
+- HTTP/1.1 request parsing and response serialization.
+- Method/path routing with registered handler functions.
+- Host validation, Content-Length framing, and bounded request sizes.
+- Partial socket writes and total receive/send deadlines.
+- Move-only RAII socket ownership and per-request error handling.
+- Windows Winsock and macOS POSIX networking.
 - PNG/JPEG input and PNG output.
 - Owned, tightly packed Gray8 and RGB8 pixel buffers.
 - Image dimension, format, and storage validation.
@@ -21,8 +30,12 @@ media_demo input.jpg edges.png --grayscale --gaussian-blur 3 1.0 --sobel
 ## Requirements
 
 - CMake 3.23 or newer.
-- A compiler supporting C++20.
+- A compiler and standard library supporting C++20, including `std::format`.
 - A build tool compatible with the selected CMake generator.
+
+The HTTP server core uses the C++ standard library and operating-system
+socket APIs. Windows builds link against `Ws2_32`. No third-party HTTP
+dependency is required.
 
 Image decoding and encoding use the vendored
 [stb libraries](https://github.com/nothings/stb). No separate image-library
@@ -33,8 +46,8 @@ installation is required.
 Clone the repository:
 
 ```sh
-git clone https://github.com/kojiaquilino/cpp-media-library.git
-cd cpp-media-library
+git clone https://github.com/kojiaquilino/cpp-http-server.git
+cd cpp-http-server
 ```
 
 Run build commands from the repository root. Use separate build directories
@@ -88,6 +101,81 @@ that generator.
 
 For other Visual Studio versions, configure a separate build directory with
 the matching generator.
+
+## HTTP server
+
+The build produces a separate `media_server` executable. Start it from the
+repository root:
+
+```sh
+# macOS
+./build-macos/media_server
+```
+
+```powershell
+# Windows
+.\build\Debug\media_server.exe
+```
+
+The server listens on `127.0.0.1:8080`. The address and port are currently
+specified in `server/main.cpp`.
+
+From a separate terminal, send a request:
+
+```sh
+curl -i http://127.0.0.1:8080/
+```
+
+Use `curl.exe` in Windows PowerShell. The current demonstration route returns
+`200 OK` with a `text/plain` body of `Hello :)`. Unknown paths return `404`;
+POST to `/` returns `405` with `Allow: GET`.
+
+### Protocol support
+
+- HTTP/1.1 over TCP, with GET and POST supported by the server.
+- Case-insensitive header names and a required, validated Host header.
+- Content-Length request bodies, including bytes split across socket reads.
+- Method/path routing; query strings are excluded from route matching.
+- `404` for unknown paths and `405` with `Allow` for disallowed route methods.
+- Complete response writes with byte-based Content-Length and CRLF framing.
+- One request per connection, followed by `Connection: close`.
+- HTTP rejection responses and connection cleanup on transport failures.
+
+| Limit | Value |
+|---|---|
+| Request line, excluding CRLF | 4,094 bytes |
+| Header section, including request line and final CRLFCRLF | 20 KiB |
+| Request body | 12 MiB |
+| Total request receive budget | 10 seconds |
+| Total response send budget | 10 seconds |
+
+Requests without Content-Length are treated as having an empty body.
+Transfer-Encoding and Expect headers are rejected. Persistent connections,
+pipelining, chunked transfer encoding, HTTP/2, and TLS are outside the current
+protocol subset. Connections are handled sequentially.
+
+### Handler registration
+
+Handlers receive a parsed `Request` and return a `Response`. Register them
+before the server enters its accept loop:
+
+```cpp
+#include "http/router.hpp"
+
+Router router;
+
+router.register_handler("GET", "/hello", [](const Request&) {
+    return Response{200, "OK", "text/plain", "Hello"};
+});
+```
+
+The router dispatches complete requests to their registered handlers. Handlers
+can call application libraries without adding application-specific logic to
+the router. Duplicate routes, invalid registrations, and empty handlers are
+rejected.
+
+The current server demonstrates HTTP handling independently of the image
+library. Image-processing API endpoints and the browser interface are planned.
 
 ## Command-line usage
 
@@ -252,6 +340,9 @@ processing or `media_io` for processing with image loading and saving.
 ```text
 include/media/    Public library headers
 src/             Library implementations and CLI
+server/http/     HTTP parsing, responses, routing, and error types
+server/net/      Socket ownership, platform networking, and byte I/O
+server/main.cpp  HTTP server application
 third_party/stb/ Image decoding and encoding dependencies
 docs/            Technical documentation and development roadmap
 ```
@@ -261,11 +352,18 @@ docs/            Technical documentation and development roadmap
 | `media_core` | Image representation, validation, operations, and pipelines |
 | `media_io` | Image loading and PNG saving; depends on `media_core` |
 | `media_demo` | Command-line application; links to `media_io` |
+| `server_net` | HTTP and socket implementation; independent of media processing |
+| `media_server` | HTTP server executable; links to `server_net` |
 
 ## Current scope
+
+The HTTP server implements a bounded HTTP/1.1 subset with reusable routing and
+Windows/macOS socket implementations. Its current executable serves a
+demonstration handler; image uploads and processing over HTTP are not yet
+connected.
 
 Processing currently uses the sequential CPU backend and supports Gray8 and
 RGB8 images. Filtering operations require Gray8 input.
 
-Parallel CPU execution, CUDA, resizing, restoration, and video processing are
+Interactive frontend, parallel CPU execution, CUDA, resizing, restoration, and video processing are
 planned extensions.
