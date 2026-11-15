@@ -89,7 +89,7 @@ Notes:
 
     /// Convert a CLI argument to their corresponding operations.
     /// @throws std::invalid_argument if the argument is an invalid operation.
-    Operation parse_operation(std::string_view operation) {
+    constexpr Operation parse_operation(std::string_view operation) {
         // Enumerate conversion to corresponding enum values
         if(operation == "--threshold") return Operation::Threshold;
         if(operation == "--grayscale") return Operation::Grayscale;
@@ -205,7 +205,6 @@ int main(int argc, char* argv[]) {
                     std::cerr << usage << '\n';
                     return 1;
                 }
-                break;
             }
 
             // media_demo input_filepath output_filepath
